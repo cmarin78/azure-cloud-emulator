@@ -19,8 +19,12 @@ endpoints to `localhost`.
 
 ## Current status
 
-This repo is freshly initialized — no service emulation yet. See
-[ROADMAP.md](ROADMAP.md) for the planned phases.
+Phase 1 (core server) is done: HTTP router with logging/recover/CORS
+middleware, ARM resource-ID parsing, `api-version` validation, an
+async-operation (LRO) helper matching `Azure-AsyncOperation`/`Location`
+polling, embedded BoltDB persistence, and a `/healthz` endpoint. No
+service is registered yet — see [ROADMAP.md](ROADMAP.md) for the next
+phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -36,10 +40,10 @@ Planned scope (subject to change as work progresses):
 ## Project structure
 
 ```
-cmd/azure-emulator/   entry point, wires up the HTTP server
-internal/storage/     embedded persistence (BoltDB) — not yet implemented
+cmd/azure-emulator/   entry point, wires up storage + server, listens on :10000
+internal/storage/     embedded persistence (BoltDB)
 internal/queue/       Service Bus-style queue emulation — not yet implemented
-internal/server/      router, middlewares, JSON/error helpers — not yet implemented
+internal/server/      router, middlewares, ARM parsing, LRO helper, JSON/error helpers, /healthz
 docs/                  banner and other documentation assets
 ```
 
@@ -58,11 +62,14 @@ docs/                  banner and other documentation assets
 
 ```bash
 cd azure-emulator
+go mod tidy
 go run ./cmd/azure-emulator
 ```
 
-By default it listens on `:10000`. This is currently a stub — it starts
-and logs that no services are wired up yet.
+By default it listens on `:10000` and persists to
+`.azure-emulator-data/azure-emulator.db`. `GET /healthz` confirms the
+process is up. No Azure service routes are registered yet — that starts
+in Phase 2 (Resource Manager).
 
 ## License
 

@@ -18,22 +18,24 @@ it per service — mirroring how gcp-emulator centralizes
 
 ## Current status
 
-Nothing implemented yet — repo scaffold only (go.mod, README, banner,
-license, empty `internal/{storage,queue,server}` packages).
+Phase 0 and Phase 1 done: repo scaffold plus a working core server
+(router, ARM path parsing, LRO/async-operation helper, BoltDB
+persistence, `/healthz`). No Azure service is registered yet — that's
+Phase 2.
 
 ## Phase 0 — Bootstrap ✅ completed
 
 - Repo structure, go.mod, README, banner, license.
 
-## Phase 1 — Core server
+## Phase 1 — Core server ✅ completed
 
 | Component | Why | Effort | Status |
 |---|---|---|---|
-| HTTP router + middleware (`internal/server`) | Foundation for every service | S | — |
-| ARM request parsing (subscription/resourceGroup/provider/name from path, `api-version` validation) | Every Azure resource URL follows this shape; centralize once | M | — |
-| Long-running operation helper (`Azure-AsyncOperation`, `Location` headers, `PUT` returning 201/202) | `az`/Terraform poll on these for create/delete of most resources | M | — |
-| Embedded persistence with BoltDB (`internal/storage`) | Single-file, no external deps — same choice as gcp-emulator | S | — |
-| Health/version endpoint | Smoke-test the server is up | S | — |
+| HTTP router + middleware (`internal/server`) | Foundation for every service | S | done |
+| ARM request parsing (subscription/resourceGroup/provider/name from path, `api-version` validation) | Every Azure resource URL follows this shape; centralize once | M | done |
+| Long-running operation helper (`Azure-AsyncOperation`, `Location` headers, `PUT` returning 201/202) | `az`/Terraform poll on these for create/delete of most resources | M | done |
+| Embedded persistence with BoltDB (`internal/storage`) | Single-file, no external deps — same choice as gcp-emulator | S | done |
+| Health/version endpoint | Smoke-test the server is up | S | done |
 
 ## Phase 2 — Resource Manager basics
 

@@ -4,14 +4,34 @@ package main
 import (
 	"flag"
 	"log"
+	"net/http"
+
+	"github.com/cesarmarin/azure-emulator/internal/server"
+	"github.com/cesarmarin/azure-emulator/internal/storage"
 )
 
 func main() {
 	addr := flag.String("addr", ":10000", "address to listen on")
+	dbPath := flag.String("db", ".azure-emulator-data/azure-emulator.db", "path to the embedded BoltDB data file")
 	flag.Parse()
 
-	log.Printf("azure-emulator starting on %s", *addr)
+	db, err := storage.Open(*dbPath)
+	if err != nil {
+		log.Fatalf("azure-emulator: %v", err)
+	}
+	defer db.Close()
 
-	// TODO: wire up storage, queue, and server modules.
-	log.Println("azure-emulator: not yet implemented")
+	srv := server.New()
+	ops := server.NewOperations()
+	server.RegisterHealth(srv.Mux())
+	server.RegisterOperations(srv.Mux(), ops)
+
+	// TODO: register service packages here as they're implemented
+	// (Resource Manager, Storage, Compute, Key Vault, ...), following
+	// the internal/services/<name>.Register(mux, db, ops) pattern.
+
+	log.Printf("azure-emulator listening on %s (data: %s)", *addr, *dbPath)
+	if err := http.ListenAndServe(*addr, srv.Handler()); err != nil {
+		log.Fatalf("azure-emulator: %v", err)
+	}
 }
