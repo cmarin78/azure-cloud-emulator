@@ -42,19 +42,23 @@ variable "storage_account" {
 }
 
 # PUT resource group (data source con `http` no soporta PUT, así que usamos
-# un null_resource + curl local-exec para la escritura, y `http` solo para
-# los GET de verificación).
+# un null_resource + local-exec para la escritura, y `http` solo para los
+# GET de verificación).
+#
+# El local-exec usa PowerShell como intérprete en vez de depender de cmd/curl:
+# en este equipo cmd /C no resuelve "curl"/"curl.exe" (PATH del proceso hijo
+# no incluye System32 pese a estar en el PATH interactivo) y, aparte, cmd no
+# soporta el escapado de comillas anidadas que necesita un body JSON, lo que
+# rompía la URL para curl (exit code 3). Invoke-RestMethod evita ambos
+# problemas.
 resource "null_resource" "resource_group" {
   triggers = {
     rg = var.resource_group
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
-      curl -sf -X PUT "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}?api-version=2021-04-01" \
-        -H "Content-Type: application/json" \
-        -d '{"location": "eastus"}'
-    EOT
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}?api-version=2021-04-01' -ContentType 'application/json' -Body '{\"location\": \"eastus\"}'"
   }
 }
 
@@ -65,11 +69,8 @@ resource "null_resource" "storage_account" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
-      curl -sf -X PUT "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Storage/storageAccounts/${var.storage_account}?api-version=2023-01-01" \
-        -H "Content-Type: application/json" \
-        -d '{"location": "eastus", "sku": {"name": "Standard_LRS"}, "kind": "StorageV2"}'
-    EOT
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Storage/storageAccounts/${var.storage_account}?api-version=2023-01-01' -ContentType 'application/json' -Body '{\"location\": \"eastus\", \"sku\": {\"name\": \"Standard_LRS\"}, \"kind\": \"StorageV2\"}'"
   }
 }
 

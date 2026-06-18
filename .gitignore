@@ -28,3 +28,12 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Terraform smoke-test local state/cache
+terraform/smoke-test/.terraform/
+terraform/smoke-test/.terraform.lock.hcl
+terraform/smoke-test/terraform.tfstate
+terraform/smoke-test/terraform.tfstate.backup
+
+# Logs locales del emulador (Windows-MCP redirection)
+*.log
