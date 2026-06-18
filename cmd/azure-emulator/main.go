@@ -13,6 +13,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/queue"
 	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
 	"github.com/cesarmarin/azure-emulator/internal/services/storageaccounts"
+	"github.com/cesarmarin/azure-emulator/internal/services/table"
 	"github.com/cesarmarin/azure-emulator/internal/storage"
 )
 
@@ -69,6 +70,7 @@ func main() {
 func registerDataPlane(mux *http.ServeMux, db *storage.DB) {
 	blobSvc := blob.New(db)
 	queueSvc := queue.New(db)
+	tableSvc := table.New(db)
 
 	mux.HandleFunc("/{accountResource}/{path...}", func(w http.ResponseWriter, r *http.Request) {
 		accountResource := r.PathValue("accountResource")
@@ -77,9 +79,11 @@ func registerDataPlane(mux *http.ServeMux, db *storage.DB) {
 			blobSvc.ServeHTTP(w, r)
 		case strings.HasSuffix(accountResource, ".queue"):
 			queueSvc.ServeHTTP(w, r)
+		case strings.HasSuffix(accountResource, ".table"):
+			tableSvc.ServeHTTP(w, r)
 		default:
 			server.WriteError(w, http.StatusNotFound, "ResourceNotFound",
-				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...' o '{account}.queue/...'")
+				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...', '{account}.queue/...' o '{account}.table/...'")
 		}
 	})
 }

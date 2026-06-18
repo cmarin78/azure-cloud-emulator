@@ -122,6 +122,47 @@ az rest --method delete --url "$Endpoint/$Account.queue/$Queue/messages/$message
 Write-Host "-- DELETE queue --"
 az rest --method delete --url "$Endpoint/$Account.queue/$Queue"
 
+$Table = "smoketesttable"
+$TableBodyFile = New-TemporaryFile
+$EntityBodyFile = New-TemporaryFile
+"{`"TableName`": `"$Table`"}" | Set-Content -NoNewline -Path $TableBodyFile
+'{"PartitionKey": "ar", "RowKey": "1", "Name": "Cesar", "Age": 47}' | Set-Content -NoNewline -Path $EntityBodyFile
+
+Write-Host "-- POST create table (data plane) --"
+az rest --method post --url "$Endpoint/$Account.table/Tables" --body "@$TableBodyFile"
+
+Write-Host "-- GET list tables --"
+az rest --method get --url "$Endpoint/$Account.table/Tables"
+
+Write-Host "-- POST insert entity --"
+az rest --method post --url "$Endpoint/$Account.table/$Table" --body "@$EntityBodyFile"
+
+Write-Host "-- GET entity puntual --"
+# La URL de una entidad puntual incluye parentesis y comillas simples
+# ("People(PartitionKey='ar',RowKey='1')"), que no confiamos en que
+# sobrevivan intactos al re-parseo de az.cmd/cmd.exe en Windows (mismo
+# espiritu que el bug del '&' y de las comillas embebidas documentado
+# arriba para blob/queue) asi que, igual que esos casos, usamos
+# Invoke-RestMethod para todas las operaciones sobre una entidad puntual.
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Account.table/$Table(PartitionKey='ar',RowKey='1')" | ConvertTo-Json -Depth 10
+
+Write-Host "-- GET query entities (`$filter=PartitionKey eq 'ar') --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Account.table/$Table()?`$filter=PartitionKey eq 'ar'" | ConvertTo-Json -Depth 10
+
+Write-Host "-- MERGE entity (PATCH, solo actualiza Age) --"
+Invoke-RestMethod -Method Patch -Uri "$Endpoint/$Account.table/$Table(PartitionKey='ar',RowKey='1')" -ContentType "application/json" -Body '{"Age": 48}'
+
+Write-Host "-- GET entity tras merge (Name debe seguir presente) --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Account.table/$Table(PartitionKey='ar',RowKey='1')" | ConvertTo-Json -Depth 10
+
+Write-Host "-- DELETE entity --"
+Invoke-RestMethod -Method Delete -Uri "$Endpoint/$Account.table/$Table(PartitionKey='ar',RowKey='1')" -Headers @{"If-Match"="*"}
+
+Write-Host "-- DELETE table --"
+Invoke-RestMethod -Method Delete -Uri "$Endpoint/$Account.table/Tables('$Table')"
+
+Remove-Item -Force $TableBodyFile, $EntityBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE storage account --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Storage/storageAccounts/$Account`?api-version=$ApiStorage"
 

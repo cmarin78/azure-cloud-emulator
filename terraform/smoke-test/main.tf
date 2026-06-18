@@ -128,6 +128,37 @@ resource "null_resource" "queue_message" {
   }
 }
 
+# Data plane: tabla + entidad, montadas bajo el endpoint path-style
+# {account}.table/... (mismo razonamiento que blob/queue arriba). La
+# entidad usa POST a la colección (sin parentesis en la URL) para no
+# arrastrar el mismo problema de comillas/parentesis con local-exec que
+# documentan los scripts de az CLI — Invoke-RestMethod no sufre el bug de
+# az.cmd/cmd.exe, pero igual evitamos parentesis en la URL donde no son
+# necesarios.
+resource "null_resource" "table" {
+  depends_on = [null_resource.storage_account]
+  triggers = {
+    table = "tfsmoketable"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Post -Uri '${var.endpoint}/${var.storage_account}.table/Tables' -ContentType 'application/json' -Body '{\"TableName\": \"tfsmoketable\"}'"
+  }
+}
+
+resource "null_resource" "table_entity" {
+  depends_on = [null_resource.table]
+  triggers = {
+    entity = "tf-smoke-entity"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Post -Uri '${var.endpoint}/${var.storage_account}.table/tfsmoketable' -ContentType 'application/json' -Body '{\"PartitionKey\": \"tf\", \"RowKey\": \"1\", \"Origin\": \"terraform\"}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -164,6 +195,19 @@ data "http" "queue_message_peek" {
   url        = "${var.endpoint}/${var.storage_account}.queue/tf-smoke-queue/messages?peekonly=true"
 }
 
+data "http" "table_list" {
+  depends_on = [null_resource.table]
+  url        = "${var.endpoint}/${var.storage_account}.table/Tables"
+}
+
+# El provider http hace el GET directamente (no pasa por cmd.exe), así que
+# los parentesis/comillas simples de la dirección de entidad puntual no
+# tienen el mismo problema documentado para az.cmd en los scripts de az CLI.
+data "http" "table_entity" {
+  depends_on = [null_resource.table_entity]
+  url        = "${var.endpoint}/${var.storage_account}.table/tfsmoketable(PartitionKey='tf',RowKey='1')"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -186,4 +230,12 @@ output "queue_metadata_response" {
 
 output "queue_message_peek_response" {
   value = jsondecode(data.http.queue_message_peek.response_body)
+}
+
+output "table_list_response" {
+  value = jsondecode(data.http.table_list.response_body)
+}
+
+output "table_entity_response" {
+  value = jsondecode(data.http.table_entity.response_body)
 }

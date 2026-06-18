@@ -126,6 +126,48 @@ echo "-- DELETE queue --"
 az rest --method delete \
   --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}"
 
+TABLE="smoketesttable"
+
+echo "-- POST create table (data plane) --"
+az rest --method post \
+  --url "${ENDPOINT}/${ACCOUNT}.table/Tables" \
+  --body "{\"TableName\": \"${TABLE}\"}"
+
+echo "-- GET list tables --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.table/Tables"
+
+echo "-- POST insert entity --"
+az rest --method post \
+  --url "${ENDPOINT}/${ACCOUNT}.table/${TABLE}" \
+  --body "{\"PartitionKey\": \"ar\", \"RowKey\": \"1\", \"Name\": \"Cesar\", \"Age\": 47}"
+
+echo "-- GET entity puntual --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.table/${TABLE}(PartitionKey='ar',RowKey='1')"
+
+echo "-- GET query entities (\$filter=PartitionKey eq 'ar') --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.table/${TABLE}()?\$filter=PartitionKey eq 'ar'"
+
+echo "-- MERGE entity (PATCH, solo actualiza Age) --"
+az rest --method patch \
+  --url "${ENDPOINT}/${ACCOUNT}.table/${TABLE}(PartitionKey='ar',RowKey='1')" \
+  --body "{\"Age\": 48}"
+
+echo "-- GET entity tras merge (Name debe seguir presente) --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.table/${TABLE}(PartitionKey='ar',RowKey='1')"
+
+echo "-- DELETE entity --"
+az rest --method delete \
+  --url "${ENDPOINT}/${ACCOUNT}.table/${TABLE}(PartitionKey='ar',RowKey='1')" \
+  --headers "If-Match=*"
+
+echo "-- DELETE table --"
+az rest --method delete \
+  --url "${ENDPOINT}/${ACCOUNT}.table/Tables('${TABLE}')"
+
 echo "-- DELETE storage account --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${ACCOUNT}?api-version=${API_STORAGE}"
