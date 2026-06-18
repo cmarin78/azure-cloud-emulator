@@ -23,12 +23,14 @@ HTTP router with logging/recover/CORS middleware, ARM resource-ID
 parsing, `api-version` validation, an async-operation (LRO) helper
 matching `Azure-AsyncOperation`/`Location` polling, embedded BoltDB
 persistence, a `/healthz` endpoint, fake subscriptions, and resource
-group CRUD (create/update, get, list, async delete). See
-[ROADMAP.md](ROADMAP.md) for the next phases.
+group CRUD (create/update, get, list, async delete). Phase 3 (Storage)
+is underway: storage account ARM CRUD is done; blob/queue/table
+data-plane is next. See [ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
 
-- **Storage**: Blob containers/blobs, Queue storage, Table storage.
+- **Storage**: ✅ storage accounts (ARM CRUD). Blob containers/blobs,
+  Queue storage, Table storage still pending.
 - **Key Vault**: secrets, keys, certificates.
 - **Compute**: virtual machines, virtual networks, disks, images.
 - **Resource Manager**: ✅ resource groups, fake subscriptions, ARM-style
@@ -44,7 +46,10 @@ cmd/azure-emulator/             entry point, wires up storage + server, listens 
 internal/storage/               embedded persistence (BoltDB)
 internal/server/                router, middlewares, ARM parsing, LRO helper, JSON/error helpers, /healthz
 internal/services/resourcemanager/  fake subscriptions + resource group CRUD
+internal/services/storageaccounts/  Microsoft.Storage/storageAccounts ARM CRUD (control plane only)
 docs/                            banner and other documentation assets
+scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator
+terraform/smoke-test/            minimal Terraform config exercising the emulator's REST endpoints
 ```
 
 ## Requirements
@@ -76,21 +81,4 @@ latter is what the Docker image uses).
 ## Running with Docker
 
 ```bash
-docker compose up --build
-```
-
-This builds the image (multi-stage: `golang:1.22-alpine` for compiling,
-`alpine:3.20` for the runtime) and starts a container listening on
-`localhost:10000`, persisting its BoltDB file to a named volume
-(`emulator-data`) so data survives restarts.
-
-Without compose:
-
-```bash
-docker build -t azure-emulator:local .
-docker run --rm -p 10000:10000 -v emulator-data:/data azure-emulator:local
-```
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+docker compose up --b

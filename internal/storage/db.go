@@ -6,6 +6,8 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -19,7 +21,14 @@ type DB struct {
 }
 
 // Open abre (o crea) el archivo de base de datos en la ruta indicada.
+// BoltDB no crea el directorio padre por sí solo, así que se asegura
+// aquí (p. ej. ".azure-emulator-data/") antes de abrir el archivo.
 func Open(path string) (*DB, error) {
+	if dir := filepath.Dir(path); dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("storage: no se pudo crear el directorio %q: %w", dir, err)
+		}
+	}
 	b, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 5 * time.Second})
 	if err != nil {
 		return nil, fmt.Errorf("storage: no se pudo abrir la base de datos %q: %w", path, err)

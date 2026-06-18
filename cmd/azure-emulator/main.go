@@ -9,6 +9,7 @@ import (
 
 	"github.com/cesarmarin/azure-emulator/internal/server"
 	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
+	"github.com/cesarmarin/azure-emulator/internal/services/storageaccounts"
 	"github.com/cesarmarin/azure-emulator/internal/storage"
 )
 
@@ -39,10 +40,11 @@ func main() {
 	server.RegisterOperations(srv.Mux(), ops)
 
 	resourcemanager.New(db, ops).Register(srv.Mux())
+	storageaccounts.New(db, ops).Register(srv.Mux())
 
 	// TODO: register more service packages here as they're implemented
-	// (Storage, Compute, Key Vault, ...), following the
-	// internal/services/<name>.New(db, ops).Register(mux) pattern.
+	// (blob/queue/table data plane, Compute, Key Vault, ...), following
+	// the internal/services/<name>.New(db, ops).Register(mux) pattern.
 
 	log.Printf("azure-emulator listening on %s (data: %s)", *addr, *dbPath)
 	if err := http.ListenAndServe(*addr, srv.Handler()); err != nil {
