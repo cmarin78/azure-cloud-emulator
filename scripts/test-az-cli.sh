@@ -58,6 +58,36 @@ echo "-- LIST storage accounts --"
 az rest --method get \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts?api-version=${API_STORAGE}"
 
+echo "-- PUT blob container (data plane) --"
+az rest --method put \
+  --url "${ENDPOINT}/${ACCOUNT}.blob/smoketest-container?restype=container"
+
+echo "-- GET blob container --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.blob/smoketest-container?restype=container"
+
+echo "-- LIST blob containers (account) --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.blob/?comp=list"
+
+echo "-- PUT blob --"
+az rest --method put \
+  --url "${ENDPOINT}/${ACCOUNT}.blob/smoketest-container/hello.txt" \
+  --headers "x-ms-blob-type=BlockBlob" \
+  --body "hola mundo desde az rest"
+
+echo "-- LIST blobs in container --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.blob/smoketest-container?restype=container&comp=list"
+
+echo "-- DELETE blob --"
+az rest --method delete \
+  --url "${ENDPOINT}/${ACCOUNT}.blob/smoketest-container/hello.txt"
+
+echo "-- DELETE blob container --"
+az rest --method delete \
+  --url "${ENDPOINT}/${ACCOUNT}.blob/smoketest-container?restype=container"
+
 echo "-- DELETE storage account --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${ACCOUNT}?api-version=${API_STORAGE}"

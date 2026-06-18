@@ -74,6 +74,34 @@ resource "null_resource" "storage_account" {
   }
 }
 
+# Data plane: container + blob, montados bajo el endpoint path-style que
+# devuelve storageaccounts.go (http://{endpoint}/{account}.blob/...). Igual
+# que arriba, PUT se hace vía local-exec porque el provider `http` solo
+# soporta GET; las verificaciones de lectura van con `data "http"`.
+resource "null_resource" "blob_container" {
+  depends_on = [null_resource.storage_account]
+  triggers = {
+    container = "tf-smoke-container"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/${var.storage_account}.blob/tf-smoke-container?restype=container'"
+  }
+}
+
+resource "null_resource" "blob" {
+  depends_on = [null_resource.blob_container]
+  triggers = {
+    blob = "hello.txt"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/${var.storage_account}.blob/tf-smoke-container/hello.txt' -ContentType 'text/plain' -Headers @{'x-ms-blob-type'='BlockBlob'} -Body 'hola mundo desde terraform'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -86,10 +114,28 @@ data "http" "storage_account" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Storage/storageAccounts/${var.storage_account}?api-version=2023-01-01"
 }
 
+data "http" "blob_list" {
+  depends_on = [null_resource.blob]
+  url        = "${var.endpoint}/${var.storage_account}.blob/tf-smoke-container?restype=container&comp=list"
+}
+
+data "http" "blob_content" {
+  depends_on = [null_resource.blob]
+  url        = "${var.endpoint}/${var.storage_account}.blob/tf-smoke-container/hello.txt"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
 
 output "storage_account_response" {
   value = jsondecode(data.http.storage_account.response_body)
+}
+
+output "blob_list_response" {
+  value = jsondecode(data.http.blob_list.response_body)
+}
+
+output "blob_content" {
+  value = data.http.blob_content.response_body
 }

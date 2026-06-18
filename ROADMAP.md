@@ -21,8 +21,9 @@ it per service — mirroring how gcp-emulator centralizes
 Phase 0, Phase 1, and Phase 2 done: core server plus Resource Manager
 basics (fake subscriptions, resource group CRUD with async delete,
 generic LRO polling) are live, and the project ships as a Docker
-image. Phase 3 (Storage) is underway: storage account ARM CRUD is
-done; blob/queue/table data-plane is next — see the table below.
+image. Phase 3 (Storage) is underway: storage account ARM CRUD and
+blob containers/blobs (data-plane) are done; queue/table data-plane
+is next — see the table below.
 Each service is now also covered by an `az rest` smoke test
 (`scripts/test-az-cli.sh`/`.ps1`) and a Terraform smoke test
 (`terraform/smoke-test/`, using the `http` provider since `azurerm`
@@ -62,7 +63,7 @@ of Compute/Key Vault — can be done in parallel with Phase 4/5.
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
 | Storage accounts (CRUD, ARM-level) | resource groups | `azurerm_storage_account`; parent of all data-plane endpoints below | M | done |
-| Blob containers/blobs (data-plane: create/list/get/delete, upload/download) | storage accounts | Most common Terraform/SDK usage (`azurerm_storage_container`, `azurerm_storage_blob`) | M | — |
+| Blob containers/blobs (data-plane: create/list/get/delete, upload/download) | storage accounts | Most common Terraform/SDK usage (`azurerm_storage_container`, `azurerm_storage_blob`) | M | done |
 | Queue storage (CRUD, enqueue/dequeue) | storage accounts | `azurerm_storage_queue` | S | — |
 | Table storage (CRUD, basic entity operations) | storage accounts | `azurerm_storage_table` | S | — |
 
@@ -109,4 +110,16 @@ Storage.
 ## Phase 7 — Web console
 
 | Component | Note | Effort | Status |
-|---|---|
+|---|---|---|---|
+| Minimal UI (`web/console`) | Browse resource groups, storage, VMs, vaults — scoped to whatever's implemented | M | — |
+
+Future phases (Monitor/Log Analytics, App Service, AKS, Functions, ARM
+custom roles/RBAC) will be added as unplanned phases once the above is
+solid, the same way gcp-emulator grew past its original 8 phases.
+
+Also tracked as future work: a fake ARM metadata endpoint
+(`/metadata/endpoints`) plus a fake Azure AD token issuer, which would
+let `az cloud register` and the real `azurerm` Terraform provider point
+at this emulator directly instead of relying on `az rest`/the `http`
+provider for testing (see "Testing with az CLI and Terraform" in
+README.md).

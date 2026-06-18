@@ -58,6 +58,38 @@ az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/prov
 Write-Host "-- LIST storage accounts --"
 az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Storage/storageAccounts`?api-version=$ApiStorage"
 
+Write-Host "-- PUT blob container (data plane) --"
+az rest --method put --url "$Endpoint/$Account.blob/smoketest-container`?restype=container"
+
+Write-Host "-- GET blob container --"
+az rest --method get --url "$Endpoint/$Account.blob/smoketest-container`?restype=container"
+
+Write-Host "-- LIST blob containers (account) --"
+az rest --method get --url "$Endpoint/$Account.blob/`?comp=list"
+
+Write-Host "-- PUT blob --"
+az rest --method put --url "$Endpoint/$Account.blob/smoketest-container/hello.txt" --headers "x-ms-blob-type=BlockBlob" --body "hola mundo desde az rest"
+
+Write-Host "-- LIST blobs in container --"
+# Nota: '&' literal en --url rompe az.cmd en Windows (cmd.exe lo trata como
+# separador de comandos al re-parsear el argumento), igual de espiritu que
+# el bug de comillas embebidas documentado arriba. Percent-encodear el '&'
+# como %26 NO sirve aqui: Go (al igual que la mayoria de parsers de query
+# string) separa los pares clave=valor por '&' LITERAL antes de decodificar
+# percent-encoding, asi que "%26" termina como parte del VALOR de
+# 'restype' en vez de separar 'restype' de 'comp', y el segundo parametro
+# nunca llega. La salida es usar Invoke-RestMethod (cmdlet nativo de
+# PowerShell, sin pasar por cmd.exe) para esta llamada puntual; el emulador
+# no valida el token de auth, asi que perder la demostracion de "az rest"
+# en esta unica linea no afecta la cobertura real del smoke test.
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Account.blob/smoketest-container?restype=container&comp=list" | ConvertTo-Json -Depth 10
+
+Write-Host "-- DELETE blob --"
+az rest --method delete --url "$Endpoint/$Account.blob/smoketest-container/hello.txt"
+
+Write-Host "-- DELETE blob container --"
+az rest --method delete --url "$Endpoint/$Account.blob/smoketest-container`?restype=container"
+
 Write-Host "-- DELETE storage account --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Storage/storageAccounts/$Account`?api-version=$ApiStorage"
 

@@ -24,13 +24,15 @@ parsing, `api-version` validation, an async-operation (LRO) helper
 matching `Azure-AsyncOperation`/`Location` polling, embedded BoltDB
 persistence, a `/healthz` endpoint, fake subscriptions, and resource
 group CRUD (create/update, get, list, async delete). Phase 3 (Storage)
-is underway: storage account ARM CRUD is done; blob/queue/table
-data-plane is next. See [ROADMAP.md](ROADMAP.md) for the next phases.
+is underway: storage account ARM CRUD and blob containers/blobs
+(data-plane) are done; queue/table data-plane is next. See
+[ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
 
-- **Storage**: ✅ storage accounts (ARM CRUD). Blob containers/blobs,
-  Queue storage, Table storage still pending.
+- **Storage**: ✅ storage accounts (ARM CRUD), ✅ blob containers/blobs
+  (data-plane: create/list/get/delete containers, upload/download/list/
+  delete blobs). Queue storage, Table storage still pending.
 - **Key Vault**: secrets, keys, certificates.
 - **Compute**: virtual machines, virtual networks, disks, images.
 - **Resource Manager**: ✅ resource groups, fake subscriptions, ARM-style
@@ -47,6 +49,7 @@ internal/storage/               embedded persistence (BoltDB)
 internal/server/                router, middlewares, ARM parsing, LRO helper, JSON/error helpers, /healthz
 internal/services/resourcemanager/  fake subscriptions + resource group CRUD
 internal/services/storageaccounts/  Microsoft.Storage/storageAccounts ARM CRUD (control plane only)
+internal/services/blob/         Blob containers/blobs data-plane (path-style {account}.blob/ endpoint)
 docs/                            banner and other documentation assets
 scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator
 terraform/smoke-test/            minimal Terraform config exercising the emulator's REST endpoints
@@ -81,4 +84,57 @@ latter is what the Docker image uses).
 ## Running with Docker
 
 ```bash
-docker compose up --b
+docker compose up --build
+```
+
+This builds the image (multi-stage: `golang:1.22-alpine` for compiling,
+`alpine:3.20` for the runtime) and starts a container listening on
+`localhost:10000`, persisting its BoltDB file to a named volume
+(`emulator-data`) so data survives restarts.
+
+Without compose:
+
+```bash
+docker build -t azure-emulator:local .
+docker run --rm -p 10000:10000 -v emulator-data:/data azure-emulator:local
+```
+
+## Testing with az CLI and Terraform
+
+Every service ships with a way to exercise it from real tooling, not just
+`curl`.
+
+**az CLI** — az CLI (and the `azurerm` Terraform provider) normally expect
+to discover ARM metadata and authenticate against real Azure AD before
+issuing any request, neither of which this emulator implements yet. The
+practical workaround is [`az rest`](https://learn.microsoft.com/cli/azure/reference-index#az-rest),
+which reuses your cached `az login` token but lets you target any URL,
+including `localhost`:
+
+```bash
+az login                       # once, any account/tenant works
+./scripts/test-az-cli.sh       # or test-az-cli.ps1 on Windows
+```
+
+This exercises subscription auto-vivification, resource group CRUD,
+storage account CRUD, and blob container/blob CRUD (create container,
+upload/list/download/delete blob, delete container) end to end against
+a running emulator instance.
+
+**Terraform** — pointing the real `azurerm` provider at the emulator
+won't work yet (same metadata/AAD discovery problem). `terraform/smoke-test/`
+uses the generic `http` provider plus `local-exec` instead, to verify the
+REST endpoints respond with the expected shape:
+
+```bash
+cd terraform/smoke-test
+terraform init
+terraform apply
+```
+
+Full `azurerm` provider compatibility (fake ARM metadata endpoint + fake
+AAD token issuer) is tracked as future work in [ROADMAP.md](ROADMAP.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
