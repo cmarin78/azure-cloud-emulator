@@ -1,0 +1,13 @@
+services:
+  azure-emulator:
+    build: .
+    image: azure-emulator:local
+    container_name: azure-emulator
+    ports:
+      - "10000:10000"
+    volumes:
+      - emulator-data:/data
+    restart: unless-stopped
+
+volumes:
+  emulator-data:

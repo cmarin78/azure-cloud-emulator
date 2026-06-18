@@ -5,14 +5,26 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/cesarmarin/azure-emulator/internal/server"
+	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
 	"github.com/cesarmarin/azure-emulator/internal/storage"
 )
 
+// envOr devuelve la variable de entorno key si está definida, o def en
+// caso contrario. Permite que docker-compose / docker run sobreescriban
+// los defaults sin tener que pasar flags.
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
 func main() {
-	addr := flag.String("addr", ":10000", "address to listen on")
-	dbPath := flag.String("db", ".azure-emulator-data/azure-emulator.db", "path to the embedded BoltDB data file")
+	addr := flag.String("addr", envOr("AZURE_EMULATOR_ADDR", ":10000"), "address to listen on")
+	dbPath := flag.String("db", envOr("AZURE_EMULATOR_DB", ".azure-emulator-data/azure-emulator.db"), "path to the embedded BoltDB data file")
 	flag.Parse()
 
 	db, err := storage.Open(*dbPath)
@@ -26,9 +38,11 @@ func main() {
 	server.RegisterHealth(srv.Mux())
 	server.RegisterOperations(srv.Mux(), ops)
 
-	// TODO: register service packages here as they're implemented
-	// (Resource Manager, Storage, Compute, Key Vault, ...), following
-	// the internal/services/<name>.Register(mux, db, ops) pattern.
+	resourcemanager.New(db, ops).Register(srv.Mux())
+
+	// TODO: register more service packages here as they're implemented
+	// (Storage, Compute, Key Vault, ...), following the
+	// internal/services/<name>.New(db, ops).Register(mux) pattern.
 
 	log.Printf("azure-emulator listening on %s (data: %s)", *addr, *dbPath)
 	if err := http.ListenAndServe(*addr, srv.Handler()); err != nil {

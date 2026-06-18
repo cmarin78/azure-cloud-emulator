@@ -18,10 +18,10 @@ it per service — mirroring how gcp-emulator centralizes
 
 ## Current status
 
-Phase 0 and Phase 1 done: repo scaffold plus a working core server
-(router, ARM path parsing, LRO/async-operation helper, BoltDB
-persistence, `/healthz`). No Azure service is registered yet — that's
-Phase 2.
+Phase 0, Phase 1, and Phase 2 done: core server plus Resource Manager
+basics (fake subscriptions, resource group CRUD with async delete,
+generic LRO polling) are live, and the project ships as a Docker
+image. Phase 3 (Storage) is next — see the table below.
 
 ## Phase 0 — Bootstrap ✅ completed
 
@@ -37,16 +37,16 @@ Phase 2.
 | Embedded persistence with BoltDB (`internal/storage`) | Single-file, no external deps — same choice as gcp-emulator | S | done |
 | Health/version endpoint | Smoke-test the server is up | S | done |
 
-## Phase 2 — Resource Manager basics
+## Phase 2 — Resource Manager basics ✅ completed
 
 Required before most other services, since every ARM resource is scoped
 under a subscription + resource group.
 
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| Fake subscriptions (static, accept any GUID) | — | `az`/Terraform need a subscription ID in every URL; no real validation needed | S | — |
-| Resource groups (CRUD) | subscriptions | `azurerm_resource_group`; almost every other resource references one | S | — |
-| Generic long-running operation polling (`/operations/{id}`) | LRO helper (Phase 1) | Needed by Compute/Storage/etc. once they return 202s | S | — |
+| Fake subscriptions (static, accept any GUID) | — | `az`/Terraform need a subscription ID in every URL; no real validation needed | S | done |
+| Resource groups (CRUD, async delete via LRO) | subscriptions | `azurerm_resource_group`; almost every other resource references one | S | done |
+| Generic long-running operation polling (`operationsStatus/{id}`) | LRO helper (Phase 1) | Needed by Compute/Storage/etc. once they return 202s | S | done |
 
 ## Phase 3 — Storage
 
