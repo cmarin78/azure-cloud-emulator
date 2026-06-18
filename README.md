@@ -24,15 +24,17 @@ parsing, `api-version` validation, an async-operation (LRO) helper
 matching `Azure-AsyncOperation`/`Location` polling, embedded BoltDB
 persistence, a `/healthz` endpoint, fake subscriptions, and resource
 group CRUD (create/update, get, list, async delete). Phase 3 (Storage)
-is underway: storage account ARM CRUD and blob containers/blobs
-(data-plane) are done; queue/table data-plane is next. See
+is underway: storage account ARM CRUD, blob containers/blobs, and
+queue storage (data-plane) are done; table data-plane is next. See
 [ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
 
 - **Storage**: ✅ storage accounts (ARM CRUD), ✅ blob containers/blobs
   (data-plane: create/list/get/delete containers, upload/download/list/
-  delete blobs). Queue storage, Table storage still pending.
+  delete blobs), ✅ queue storage (data-plane: create/list/get-metadata/
+  delete queues, put/peek/get(dequeue)/delete messages, visibility
+  timeout + pop receipts). Table storage still pending.
 - **Key Vault**: secrets, keys, certificates.
 - **Compute**: virtual machines, virtual networks, disks, images.
 - **Resource Manager**: ✅ resource groups, fake subscriptions, ARM-style
@@ -50,6 +52,7 @@ internal/server/                router, middlewares, ARM parsing, LRO helper, JS
 internal/services/resourcemanager/  fake subscriptions + resource group CRUD
 internal/services/storageaccounts/  Microsoft.Storage/storageAccounts ARM CRUD (control plane only)
 internal/services/blob/         Blob containers/blobs data-plane (path-style {account}.blob/ endpoint)
+internal/services/queue/        Queue storage data-plane (path-style {account}.queue/ endpoint)
 docs/                            banner and other documentation assets
 scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator
 terraform/smoke-test/            minimal Terraform config exercising the emulator's REST endpoints
@@ -117,9 +120,10 @@ az login                       # once, any account/tenant works
 ```
 
 This exercises subscription auto-vivification, resource group CRUD,
-storage account CRUD, and blob container/blob CRUD (create container,
-upload/list/download/delete blob, delete container) end to end against
-a running emulator instance.
+storage account CRUD, blob container/blob CRUD (create container,
+upload/list/download/delete blob, delete container), and queue storage
+(create queue, put/peek/get(dequeue)/delete message, delete queue) end
+to end against a running emulator instance.
 
 **Terraform** — pointing the real `azurerm` provider at the emulator
 won't work yet (same metadata/AAD discovery problem). `terraform/smoke-test/`

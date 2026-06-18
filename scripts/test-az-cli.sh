@@ -88,6 +88,44 @@ echo "-- DELETE blob container --"
 az rest --method delete \
   --url "${ENDPOINT}/${ACCOUNT}.blob/smoketest-container?restype=container"
 
+QUEUE="smoketest-queue"
+
+echo "-- PUT queue (data plane) --"
+az rest --method put \
+  --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}"
+
+echo "-- GET queue metadata --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}?comp=metadata"
+
+echo "-- LIST queues (account) --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.queue/?comp=list"
+
+echo "-- PUT message --"
+az rest --method post \
+  --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}/messages" \
+  --body "hola mundo desde az rest"
+
+echo "-- PEEK message (no lo reserva, no hay popReceipt) --"
+az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}/messages?peekonly=true"
+
+echo "-- GET message (dequeue: reserva con popReceipt + visibilitytimeout) --"
+GET_RESPONSE=$(az rest --method get \
+  --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}/messages?numofmessages=1&visibilitytimeout=30")
+echo "${GET_RESPONSE}"
+MESSAGE_ID=$(echo "${GET_RESPONSE}" | grep -oP '"messageId"\s*:\s*"\K[^"]+' | head -1)
+POP_RECEIPT=$(echo "${GET_RESPONSE}" | grep -oP '"popReceipt"\s*:\s*"\K[^"]+' | head -1)
+
+echo "-- DELETE message (requiere el popReceipt de la última lectura) --"
+az rest --method delete \
+  --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}/messages/${MESSAGE_ID}?popreceipt=${POP_RECEIPT}"
+
+echo "-- DELETE queue --"
+az rest --method delete \
+  --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}"
+
 echo "-- DELETE storage account --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${ACCOUNT}?api-version=${API_STORAGE}"

@@ -79,25 +79,18 @@ type storedBlob struct {
 	ContentB64 string `json:"contentB64"`
 }
 
-// Register monta las rutas de data plane de blobs. El primer segmento del
-// path siempre es "{account}.blob" (ver comentario del paquete); todo lo
-// que sigue se interpreta como container/blob dentro de handleRequest, ya
-// que net/http.ServeMux no permite mezclar texto literal y wildcard en el
-// mismo segmento de un patrón (no se puede escribir "{account}.blob"
-// directamente como patrón).
-//
-// Un solo patrón con wildcard final "{path...}" basta: ese wildcard
-// también matchea cero segmentos restantes (path=""), que es el caso de
-// operaciones a nivel de cuenta (GET /{account}.blob/?comp=list).
-// Registrar además "/{accountBlob}/" en paralelo provoca un panic en
-// net/http.ServeMux ("conflicts with pattern") porque ambos patrones
-// matchean exactamente las mismas requests.
-func (s *Service) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/{accountBlob}/{path...}", s.handleRequest)
-}
-
-func (s *Service) handleRequest(w http.ResponseWriter, r *http.Request) {
-	accountBlob := r.PathValue("accountBlob")
+// ServeHTTP atiende una request de data plane de blobs ya enrutada por el
+// dispatcher compartido (ver cmd/azure-emulator/main.go): ese dispatcher
+// es el único que registra el patrón "/{accountResource}/{path...}" en el
+// mux (net/http.ServeMux no permite registrar dos patrones con la misma
+// forma de wildcards, así que blob y queue no pueden registrar cada uno
+// su propio "/{accountX}/{path...}" — chocarían pese a tener nombres de
+// wildcard distintos), y delega aquí cuando el primer segmento del path
+// termina en ".blob". El wildcard final "{path...}" también matchea cero
+// segmentos restantes (path=""), que es el caso de operaciones a nivel de
+// cuenta (GET /{account}.blob/?comp=list).
+func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	accountBlob := r.PathValue("accountResource")
 	account, ok := strings.CutSuffix(accountBlob, ".blob")
 	if !ok {
 		server.WriteError(w, http.StatusNotFound, "ResourceNotFound",

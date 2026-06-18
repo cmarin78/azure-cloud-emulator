@@ -90,6 +90,38 @@ az rest --method delete --url "$Endpoint/$Account.blob/smoketest-container/hello
 Write-Host "-- DELETE blob container --"
 az rest --method delete --url "$Endpoint/$Account.blob/smoketest-container`?restype=container"
 
+$Queue = "smoketest-queue"
+
+Write-Host "-- PUT queue (data plane) --"
+az rest --method put --url "$Endpoint/$Account.queue/$Queue"
+
+Write-Host "-- GET queue metadata --"
+az rest --method get --url "$Endpoint/$Account.queue/$Queue`?comp=metadata"
+
+Write-Host "-- LIST queues (account) --"
+az rest --method get --url "$Endpoint/$Account.queue/`?comp=list"
+
+Write-Host "-- PUT message --"
+az rest --method post --url "$Endpoint/$Account.queue/$Queue/messages" --body "hola mundo desde az rest"
+
+Write-Host "-- PEEK message (no lo reserva, no hay popReceipt) --"
+az rest --method get --url "$Endpoint/$Account.queue/$Queue/messages`?peekonly=true"
+
+Write-Host "-- GET message (dequeue: reserva con popReceipt + visibilitytimeout) --"
+# Mismo problema del '&' con az.cmd/cmd.exe documentado arriba para el LIST
+# de blobs: numofmessages y visibilitytimeout son dos query params, así que
+# usamos Invoke-RestMethod en vez de az rest para esta llamada puntual.
+$got = Invoke-RestMethod -Method Get -Uri "$Endpoint/$Account.queue/$Queue/messages?numofmessages=1&visibilitytimeout=30"
+$got | ConvertTo-Json -Depth 10
+$messageId = $got.value[0].messageId
+$popReceipt = $got.value[0].popReceipt
+
+Write-Host "-- DELETE message (requiere el popReceipt de la última lectura) --"
+az rest --method delete --url "$Endpoint/$Account.queue/$Queue/messages/$messageId`?popreceipt=$popReceipt"
+
+Write-Host "-- DELETE queue --"
+az rest --method delete --url "$Endpoint/$Account.queue/$Queue"
+
 Write-Host "-- DELETE storage account --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Storage/storageAccounts/$Account`?api-version=$ApiStorage"
 

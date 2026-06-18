@@ -102,6 +102,32 @@ resource "null_resource" "blob" {
   }
 }
 
+# Data plane: queue + mensaje, montados bajo el endpoint path-style
+# {account}.queue/... (mismo razonamiento que blob arriba).
+resource "null_resource" "queue" {
+  depends_on = [null_resource.storage_account]
+  triggers = {
+    queue = "tf-smoke-queue"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/${var.storage_account}.queue/tf-smoke-queue'"
+  }
+}
+
+resource "null_resource" "queue_message" {
+  depends_on = [null_resource.queue]
+  triggers = {
+    message = "hola mundo desde terraform (queue)"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Post -Uri '${var.endpoint}/${var.storage_account}.queue/tf-smoke-queue/messages' -Body 'hola mundo desde terraform (queue)'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -124,6 +150,20 @@ data "http" "blob_content" {
   url        = "${var.endpoint}/${var.storage_account}.blob/tf-smoke-container/hello.txt"
 }
 
+# peekonly=true para no consumir/reservar el mensaje en cada refresh de
+# Terraform (a diferencia de un GET de dequeue normal, peek no cambia
+# dequeueCount ni oculta el mensaje, así que es seguro para una data
+# source que Terraform puede releer en cualquier momento).
+data "http" "queue_metadata" {
+  depends_on = [null_resource.queue]
+  url        = "${var.endpoint}/${var.storage_account}.queue/tf-smoke-queue?comp=metadata"
+}
+
+data "http" "queue_message_peek" {
+  depends_on = [null_resource.queue_message]
+  url        = "${var.endpoint}/${var.storage_account}.queue/tf-smoke-queue/messages?peekonly=true"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -138,4 +178,12 @@ output "blob_list_response" {
 
 output "blob_content" {
   value = data.http.blob_content.response_body
+}
+
+output "queue_metadata_response" {
+  value = jsondecode(data.http.queue_metadata.response_body)
+}
+
+output "queue_message_peek_response" {
+  value = jsondecode(data.http.queue_message_peek.response_body)
 }
