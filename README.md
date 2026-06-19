@@ -50,7 +50,13 @@ middleware (so ARM's case-insensitive literal segments like
 together let the real `azurerm` Terraform provider point at this
 emulator directly — see "Testing with az CLI and Terraform" below for
 the working end-to-end flow and the one known limitation (az CLI
-itself). See [ROADMAP.md](ROADMAP.md) for the next phases.
+itself). Phase 9 (automated test suite + CI) is done: every service
+package has a Go test file exercising its ARM CRUD and data-plane
+behavior, `cmd/azure-emulator` has a test that reproduces `main()`'s
+full service-registration wiring to catch `http.ServeMux` route
+conflicts, and GitHub Actions runs build/vet/test on every push and
+pull request — see "Running tests" below. See [ROADMAP.md](ROADMAP.md)
+for the next phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -82,6 +88,8 @@ Planned scope (subject to change as work progresses):
 - ✅ Real `az`/`azurerm` compatibility: ARM metadata discovery, fake AAD
   token issuer, Microsoft Graph stub, `providers` registration, optional
   self-signed TLS, and case-insensitive ARM path matching.
+- ✅ Automated test suite (one `*_test.go` per service package, plus a
+  `cmd/azure-emulator` registration test) and GitHub Actions CI.
 
 ## Project structure
 
@@ -198,6 +206,24 @@ Without compose:
 docker build -t azure-emulator:local .
 docker run --rm -p 10000:10000 -v emulator-data:/data azure-emulator:local
 ```
+
+## Running tests
+
+Every service package ships its own `*_test.go` (ARM CRUD plus
+data-plane behavior, via `net/http/httptest` — no real network or
+external dependencies needed), and `cmd/azure-emulator` has a test
+that reproduces `main()`'s exact service-registration order against a
+single `http.ServeMux` to catch duplicate-route panics before they'd
+hit a real run:
+
+```bash
+go build ./...
+go vet ./...
+go test ./... -race
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the same three steps
+on every push and pull request.
 
 ## Testing with az CLI and Terraform
 

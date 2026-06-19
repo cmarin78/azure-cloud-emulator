@@ -39,8 +39,13 @@ discovery, a fake AAD token issuer, a Microsoft Graph stub, the
 path case-normalization middleware together let the real `azurerm`
 Terraform provider run full `apply`/`destroy` cycles against the
 emulator — see Phase 8 below for details and the one remaining known
-limitation (az CLI's MSAL instance-discovery check). See the table
-below for the per-phase breakdown.
+limitation (az CLI's MSAL instance-discovery check). Phase 9
+(automated test suite + CI) is done: every service package has a
+`*_test.go` covering its ARM CRUD and data-plane behavior via
+`httptest`, `cmd/azure-emulator` has a registration test that
+reproduces `main()`'s full wiring to catch duplicate-route panics, and
+GitHub Actions runs build/vet/test (with `-race`) on every push and
+pull request. See the table below for the per-phase breakdown.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -236,6 +241,28 @@ version. This blocks `az login --service-principal`/`az cloud register`
 specifically — `az rest` (reusing a real `az login` token) remains the
 practical way to drive the emulator from az CLI. `azurerm`'s Go-based
 auth stack does not perform this check, so Terraform is unaffected.
+
+## Phase 9 — Automated test suite + CI ✅ completed
+
+| Component | Why | Effort | Status |
+|---|---|---|---|
+| `internal/testutil` (`NewDB`, `DoJSON`, `WithAPIVersion`) | Shared helper for spinning up an in-memory BoltDB + driving JSON requests against an `httptest.Server`, avoiding per-package boilerplate | S | done |
+| `*_test.go` per service package (resourcemanager, storageaccounts, blob, queue, table, network, compute, keyvault, servicebus, cosmosdb, armmeta, aadtoken, graph) | Regression coverage for ARM CRUD (idempotent vs. non-idempotent deletes, required-field validation, parent-resource existence checks) and data-plane behavior (blob/queue/table operations, Key Vault secrets/keys/certs, Service Bus send/peek-lock/complete/fan-out, Cosmos DB documents) | L | done |
+| `cmd/azure-emulator/main_test.go` (`TestAllServicesRegisterWithoutPanic`) | Reproduces `main()`'s exact service-registration order against a single `http.ServeMux`, so a duplicate route pattern panics in CI instead of at first real startup — same rationale as gcp-emulator's equivalent test | S | done |
+| `.github/workflows/ci.yml` | Runs `go build ./...`, `go vet ./...`, and `go test ./... -race` on every push/PR | S | done |
+
+This phase mirrors gcp-emulator's own post-launch addition of a test
+suite. Writing the Service Bus test (`TestTopicFanOutToSubscriptions`)
+caught a real bug: `queueEntityPath`/`topicEntityPath` in
+`internal/services/servicebus/dataplane_index.go` both produced the
+identical key format (`namespace + "/" + name`), so any topic was also
+misidentified as a queue by the messaging dispatcher's `isQueue`
+check (checked before `isTopic`) — meaning topics always took the
+single-recipient queue send path instead of fanning out to their
+subscriptions. Fixed by giving queues and topics distinct key prefixes
+(`"/queues/"` vs. `"/topics/"`); confirmed via `grep` that no other
+code duplicated the old format, so the fix was self-contained to that
+one file.
 
 Future phases (Monitor/Log Analytics, App Service, AKS, Functions, ARM
 custom roles/RBAC) will be added as unplanned phases once the above is
