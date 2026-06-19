@@ -1,16 +1,17 @@
 # Smoke-test de Terraform contra el emulador.
 #
-# IMPORTANTE: esto NO usa el provider `azurerm` real. El provider azurerm
-# hace descubrimiento de metadata ARM (GET https://<endpoint>/metadata/endpoints)
-# y requiere un token de Azure AD válido antes de emitir un solo request —
-# ninguna de las dos cosas las implementa (todavía) este emulador. Apuntar
-# azurerm directamente a localhost fallará en el paso de autenticación,
-# antes de llegar a nuestras rutas.
+# Nota: esto usa el provider genérico `http` (no el provider `azurerm`
+# real) a propósito, para verificar que las rutas REST de cada fase
+# responden con la forma esperada vía `local-exec`/`data "http"` — útil
+# para CI/regresión de superficie amplia (todas las fases en un solo
+# archivo), no para probar el ciclo de vida real de recursos azurerm.
 #
-# Mientras eso no esté implementado (ver ROADMAP.md), este smoke-test usa
-# el provider genérico `http` para verificar que las rutas REST responden
-# con la forma esperada — útil para CI/regresión, no para "terraform apply"
-# real de recursos azurerm.
+# El provider `azurerm` real SÍ funciona contra este emulador desde la
+# Fase 8 (descubrimiento de metadata ARM, emisor de tokens AAD falso,
+# Microsoft Graph mínimo, TLS opcional, normalización de mayúsculas en
+# rutas ARM) — ver terraform/azurerm-smoke-test/main.tf para ese caso, y
+# "Testing with az CLI and Terraform" en README.md para los pasos
+# completos (incluye confiar en el certificado autofirmado).
 
 terraform {
   required_providers {

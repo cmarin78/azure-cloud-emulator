@@ -32,7 +32,15 @@ implemented. Phase 6 (Messaging and data) is done: Service Bus
 namespaces/queues/topics/subscriptions (ARM CRUD) plus message send/
 peek-lock-receive/complete (data-plane), and Cosmos DB SQL API
 accounts/databases/containers (ARM CRUD) plus document CRUD
-(data-plane) are implemented — see the table below.
+(data-plane) are implemented. Phase 7 (Web console) is done. Phase 8
+(real `az`/`azurerm` compatibility) is done: fake ARM metadata
+discovery, a fake AAD token issuer, a Microsoft Graph stub, the
+`providers` registration endpoint, optional self-signed TLS, and an ARM
+path case-normalization middleware together let the real `azurerm`
+Terraform provider run full `apply`/`destroy` cycles against the
+emulator — see Phase 8 below for details and the one remaining known
+limitation (az CLI's MSAL instance-discovery check). See the table
+below for the per-phase breakdown.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -122,4 +130,113 @@ Target (still open): `terraform apply`/`destroy` against the real
 `azurerm_virtual_network` + `azurerm_network_interface` +
 `azurerm_linux_virtual_machine` resources, without provider patches —
 blocked on the fake ARM metadata/AAD work tracked below, same as the
-`azurerm
+`azurerm_storage_account` equivalent in Phase 3.
+
+## Phase 5 — Key Vault ✅ completed
+
+Standalone, no dependency on Compute/Storage beyond a resource group.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| Vaults (ARM-level CRUD) | resource groups | `azurerm_key_vault` | S | done |
+| Secrets (CRUD) | vaults | `azurerm_key_vault_secret`; most common use case | S | done |
+| Keys (CRUD, basic ops) | vaults | `azurerm_key_vault_key` | M | done |
+| Certificates (CRUD, basic ops) | vaults | `azurerm_key_vault_certificate` | M | done |
+
+Keys and certificates don't implement real cryptographic operations
+(sign/encrypt/wrapKey/X.509) — they generate random bytes via
+`crypto/rand` to populate JWK fields (`n`/`e`) or certificate fields
+(`cer`/`x5t` thumbprint), which is enough for `az`/Terraform to
+create/read/list/delete them end to end. Secrets follow the same
+list-never-echoes-the-value convention as the real API. Vault deletes
+are idempotent (204 if missing, matching resource groups' convention);
+secret/key/certificate deletes return 404 if missing (matching queue
+storage's data-plane convention).
+
+## Phase 6 — Messaging and data ✅ completed
+
+Independent of each other; each is a new package similar in size to
+Storage.
+
+| Service | Minimum resources | Effort | Status |
+|---|---|---|---|
+| Service Bus | namespaces, queues, topics/subscriptions, send/receive | M | done |
+| Cosmos DB (SQL API) | accounts, databases, containers, document CRUD | L | done |
+
+Service Bus: namespace create/get/delete is async (matching real
+Azure's LRO pattern), queues and topics/subscriptions are sync ARM
+sub-resources. Messaging uses peek-lock semantics (`lockToken`,
+`lockedUntilUtc`, `deliveryCount`), with `?peeklock=false` for
+peek-only reads and `?maxmessages=`/`?locktimeout=` query params;
+sending to a topic fans out to all of its subscriptions; completing a
+message requires an exact `lockToken` match via
+`DELETE .../messages/{id}?lockToken=...`.
+
+Cosmos DB: account create/get/delete is async, databases and
+containers are sync ARM sub-resources (container creation requires
+`partitionKey.paths`). Document data-plane is simplified vs real Azure
+— a plain JSON body instead of the `x-ms-documentdb-partitionkey`
+header — and supports PUT (create/replace by id in the URL), POST
+(create with an auto-generated id if the body omits one), GET (single
+document or list), and DELETE (404 if missing, matching Key Vault's
+data-plane convention rather than resource groups' idempotent 204).
+
+## Phase 7 — Web console ✅ completed
+
+| Component | Note | Effort | Status |
+|---|---|---|---|
+| Minimal UI (`web/console`) | Browse resource groups, storage, VMs, vaults, Service Bus namespaces, Cosmos DB accounts | M | done |
+
+Plain vanilla HTML/CSS/JS, no build step — the binary itself serves it
+via `http.FileServer`, talking to the emulator's own JSON REST API with
+`fetch` (same origin). Controlled by the `-web` flag
+(`AZURE_EMULATOR_WEB` env var), default `web/console`; the console is
+disabled automatically if that directory doesn't exist. Covers all six
+ARM resource types implemented through Phase 6: resource groups,
+storage accounts, virtual machines (list/start/stop/delete only — VM
+creation needs a pre-existing NIC/disk, out of scope for the console),
+Key Vault vaults, Service Bus namespaces, and Cosmos DB accounts.
+
+Note on routing: the console's static assets are served under
+`/console/` rather than at the root. The data-plane dispatcher
+(`registerDataPlane`) registers `/{accountResource}/{path...}`, which
+`net/http.ServeMux` treats as a "subtree" pattern — a request for a
+single top-level path like `/style.css` (no trailing slash) gets
+redirected to `/style.css/` first, and that second request matches the
+wildcard (`accountResource="style.css"`, empty `path`), landing in the
+dispatcher's default case as a 404. A literal prefix like `/console/`
+is more specific than the wildcard, so `ServeMux` picks it first and
+the redirect/404 never happens. Only `GET /` itself is registered as an
+exact pattern (`GET /{$}`) serving `index.html` directly.
+
+## Phase 8 — Real `az`/`azurerm` compatibility ✅ completed
+
+| Component | Why | Effort | Status |
+|---|---|---|---|
+| Fake ARM metadata endpoint (`/metadata/endpoints`, `internal/services/armmeta`) | `az cloud register` and `azurerm`'s `environment = "custom"` both require this to discover endpoint URLs before issuing any other request | M | done |
+| Fake Azure AD token issuer (`/login/{tenant}/oauth2/v2.0/token`, `internal/services/aadtoken`) | Accepts any `client_id`/`client_secret`/`tenant_id` and issues a usable bearer token, standing in for real AAD | M | done |
+| `providers` registration endpoint (`internal/services/resourcemanager`) | `azurerm` checks `GET /subscriptions/{id}/providers[/{namespace}]` at startup; an unregistered namespace fails the plan before any resource call | S | done |
+| Minimal Microsoft Graph stub (`GET /v1.0/servicePrincipals`, `internal/services/graph`) | `azurerm` resolves the authenticated service principal's object ID via Graph when the access token has no `oid` claim — always true here, since the fake token issuer doesn't simulate a real directory | S | done |
+| Optional self-signed TLS (`-tls`/`-tls-cert`/`-tls-key`, `internal/devtls`) | Both az CLI's MSAL stack and `azurerm`'s Go TLS stack refuse to treat a custom cloud as valid over plain HTTP | M | done |
+| ARM path case-normalization middleware (`internal/server/armcase.go`) | `azurerm`'s Go SDK normalizes the fixed segments of resource IDs it builds to lowercase (e.g. `resourcegroups`), but `net/http.ServeMux` route patterns match literal segments case-sensitively (`resourceGroups`) | M | done |
+| `GET /subscriptions/{id}/resourceGroups/{rg}/resources` (generic resource listing, `resourcemanager.go`) | `azurerm` calls this before `terraform destroy` of a resource group to determine deletion ordering of its contents; returns an empty list since this emulator has no cross-service resource index | S | done |
+| `terraform/azurerm-smoke-test/` | Proves the real `hashicorp/azurerm` provider (not the generic `http` provider) works end to end: auth, metadata discovery, resource create, resource destroy | S | done |
+
+Confirmed via two full `terraform apply`/`destroy` cycles against the
+real `azurerm` provider (`azurerm_resource_group` create + destroy,
+plus `data "azurerm_subscription"` read) — see "Testing with az CLI and
+Terraform" in README.md for the exact commands and required cert-trust
+steps.
+
+Known limitation (not fixable from the emulator side): az CLI's MSAL
+library performs an "instance discovery" check against Microsoft's own
+endpoint before accepting any authority, and rejects `localhost` with
+no documented flag to disable this in the currently-installed az CLI
+version. This blocks `az login --service-principal`/`az cloud register`
+specifically — `az rest` (reusing a real `az login` token) remains the
+practical way to drive the emulator from az CLI. `azurerm`'s Go-based
+auth stack does not perform this check, so Terraform is unaffected.
+
+Future phases (Monitor/Log Analytics, App Service, AKS, Functions, ARM
+custom roles/RBAC) will be added as unplanned phases once the above is
+solid, the same way gcp-emulator grew past its original 8 phases.

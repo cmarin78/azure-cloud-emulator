@@ -31,7 +31,7 @@ func (s *Server) Mux() *http.ServeMux {
 // panics y CORS habilitado para que la consola web pueda llamar al
 // emulador desde otro puerto/origen.
 func (s *Server) Handler() http.Handler {
-	return withCORS(withLogging(withRecover(s.mux)))
+	return withCORS(withLogging(withRecover(withARMCaseNormalization(s.mux))))
 }
 
 func withRecover(next http.Handler) http.Handler {

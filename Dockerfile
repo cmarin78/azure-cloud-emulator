@@ -26,4 +26,9 @@ USER emulator
 
 ENV AZURE_EMULATOR_ADDR=:10000
 ENV AZURE_EMULATOR_DB=/data/azure-emulator.db
-ENV AZURE_EMULATOR_WEB=/app/web/c
+ENV AZURE_EMULATOR_WEB=/app/web/console
+
+EXPOSE 10000
+VOLUME ["/data"]
+
+ENTRYPOINT ["./azure-emulator"]

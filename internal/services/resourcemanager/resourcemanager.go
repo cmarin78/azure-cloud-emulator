@@ -74,6 +74,101 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}", s.putResourceGroup)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}", s.getResourceGroup)
 	mux.HandleFunc("DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}", s.deleteResourceGroup)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/resources", s.listResourcesInGroup)
+
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers", s.listProviders)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/{providerNamespace}", s.getProvider)
+}
+
+// Provider replica la forma mínima de un resource provider de ARM (lo que
+// devuelve GET /subscriptions/{id}/providers[/{namespace}]). El provider
+// `azurerm` de Terraform consulta este endpoint al iniciar para construir
+// su caché de registro: si el namespace que va a usar no aparece como
+// "Registered", falla el plan/apply antes de llegar a crear ningún recurso.
+// registeredNamespaces cubre exactamente los providers que el emulador
+// implementa hoy; cualquier otro namespace responde "NotRegistered".
+type Provider struct {
+	ID                string                 `json:"id"`
+	Namespace         string                 `json:"namespace"`
+	RegistrationState string                 `json:"registrationState"`
+	ResourceTypes     []ProviderResourceType `json:"resourceTypes"`
+}
+
+// ProviderResourceType replica el shape mínimo de cada tipo de recurso
+// dentro de un provider. Azure real devuelve mucho más detalle (locations,
+// apiVersions, capabilities...); aquí basta con lo que algunas
+// herramientas leen para decidir si el tipo existe en este provider.
+type ProviderResourceType struct {
+	ResourceType string   `json:"resourceType"`
+	Locations    []string `json:"locations"`
+}
+
+var registeredNamespaces = []Provider{
+	{Namespace: "Microsoft.Resources", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "resourceGroups", Locations: []string{"eastus", "westus2"}},
+	}},
+	{Namespace: "Microsoft.Storage", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "storageAccounts", Locations: []string{"eastus", "westus2"}},
+	}},
+	{Namespace: "Microsoft.Network", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "virtualNetworks", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "networkInterfaces", Locations: []string{"eastus", "westus2"}},
+	}},
+	{Namespace: "Microsoft.Compute", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "disks", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "virtualMachines", Locations: []string{"eastus", "westus2"}},
+	}},
+	{Namespace: "Microsoft.KeyVault", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "vaults", Locations: []string{"eastus", "westus2"}},
+	}},
+	{Namespace: "Microsoft.ServiceBus", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}},
+	}},
+	{Namespace: "Microsoft.DocumentDB", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "databaseAccounts", Locations: []string{"eastus", "westus2"}},
+	}},
+}
+
+func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {
+	if _, ok := server.RequireAPIVersion(w, r); !ok {
+		return
+	}
+	subID := r.PathValue("subscriptionId")
+
+	providers := make([]Provider, 0, len(registeredNamespaces))
+	for _, p := range registeredNamespaces {
+		p.ID = fmt.Sprintf("/subscriptions/%s/providers/%s", subID, p.Namespace)
+		p.RegistrationState = "Registered"
+		providers = append(providers, p)
+	}
+	server.WriteJSON(w, http.StatusOK, map[string]any{"value": providers})
+}
+
+func (s *Service) getProvider(w http.ResponseWriter, r *http.Request) {
+	if _, ok := server.RequireAPIVersion(w, r); !ok {
+		return
+	}
+	subID := r.PathValue("subscriptionId")
+	namespace := r.PathValue("providerNamespace")
+
+	for _, p := range registeredNamespaces {
+		if strings.EqualFold(p.Namespace, namespace) {
+			p.ID = fmt.Sprintf("/subscriptions/%s/providers/%s", subID, p.Namespace)
+			p.RegistrationState = "Registered"
+			server.WriteJSON(w, http.StatusOK, p)
+			return
+		}
+	}
+
+	// Namespace desconocido: se modela como "NotRegistered" en vez de 404,
+	// igual que Azure real (el namespace "existe" conceptualmente, solo que
+	// no está registrado en la suscripción).
+	server.WriteJSON(w, http.StatusOK, Provider{
+		ID:                fmt.Sprintf("/subscriptions/%s/providers/%s", subID, namespace),
+		Namespace:         namespace,
+		RegistrationState: "NotRegistered",
+		ResourceTypes:     []ProviderResourceType{},
+	})
 }
 
 // getSubscription "auto-vivifica" cualquier subscriptionId: no hace falta
@@ -184,6 +279,23 @@ func (s *Service) listResourceGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.WriteJSON(w, http.StatusOK, map[string]any{"value": groups})
+}
+
+// listResourcesInGroup emula GET .../resourceGroups/{rg}/resources
+// (Microsoft.Resources/resources, listado genérico cross-provider). El
+// provider de Terraform `azurerm` lo consulta antes de borrar un resource
+// group, para decidir el orden de borrado de los recursos que contiene.
+// Este emulador no mantiene un índice genérico de todos los recursos de
+// cada servicio (cada paquete tiene su propio bucket de BoltDB), así que
+// simplemente respondemos una lista vacía: es exacto para el caso de uso
+// real de las pruebas de este proyecto (resource groups vacíos o cuyos
+// recursos se borran explícitamente antes del resource group) y evita el
+// 404 que rompía `terraform destroy`.
+func (s *Service) listResourcesInGroup(w http.ResponseWriter, r *http.Request) {
+	if _, ok := server.RequireAPIVersion(w, r); !ok {
+		return
+	}
+	server.WriteJSON(w, http.StatusOK, map[string]any{"value": []any{}})
 }
 
 // deleteResourceGroup imita el comportamiento real de ARM: borrar un
