@@ -527,6 +527,94 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $PlanBodyFile, $SiteBodyFile, $AppSettingsBodyFile -ErrorAction SilentlyContinue
 
+$Nsg = "smoketestnsg"
+$Pip = "smoketestpip"
+$Lb = "smoketestlb"
+$Rt = "smoketestrt"
+$DnsZone = "smoketest.internal"
+
+$NsgBodyFile = New-TemporaryFile
+$RuleBodyFile = New-TemporaryFile
+$PipBodyFile = New-TemporaryFile
+$LbBodyFile = New-TemporaryFile
+$RtBodyFile = New-TemporaryFile
+$RouteBodyFile = New-TemporaryFile
+$DnsRecordBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $NsgBodyFile
+'{"properties": {"priority": 100, "direction": "Inbound", "access": "Allow", "protocol": "Tcp", "sourceAddressPrefix": "*", "destinationAddressPrefix": "*", "sourcePortRange": "*", "destinationPortRange": "22"}}' | Set-Content -NoNewline -Path $RuleBodyFile
+"{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $PipBodyFile
+
+Write-Host "-- PUT network security group (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/networkSecurityGroups/$Nsg`?api-version=$ApiNetwork" --body "@$NsgBodyFile"
+
+Write-Host "-- GET network security group --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/networkSecurityGroups/$Nsg`?api-version=$ApiNetwork"
+
+Write-Host "-- PUT security rule (sub-recurso) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/networkSecurityGroups/$Nsg/securityRules/allow-ssh`?api-version=$ApiNetwork" --body "@$RuleBodyFile"
+
+Write-Host "-- GET security rule --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/networkSecurityGroups/$Nsg/securityRules/allow-ssh`?api-version=$ApiNetwork"
+
+Write-Host "-- PUT public IP address (ARM, sync, IP determinista) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/publicIPAddresses/$Pip`?api-version=$ApiNetwork" --body "@$PipBodyFile"
+
+Write-Host "-- GET public IP address --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/publicIPAddresses/$Pip`?api-version=$ApiNetwork"
+
+$PipId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/publicIPAddresses/$Pip"
+$LbId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/loadBalancers/$Lb"
+"{`"location`": `"$Location`", `"properties`": {`"frontendIPConfigurations`": [{`"name`": `"frontend1`", `"properties`": {`"publicIPAddress`": {`"id`": `"$PipId`"}}}], `"backendAddressPools`": [{`"name`": `"backend1`"}], `"loadBalancingRules`": [{`"name`": `"rule1`", `"properties`": {`"frontendIPConfiguration`": {`"id`": `"$LbId/frontendIPConfigurations/frontend1`"}, `"backendAddressPool`": {`"id`": `"$LbId/backendAddressPools/backend1`"}, `"protocol`": `"Tcp`", `"frontendPort`": 80, `"backendPort`": 8080}}]}}" | Set-Content -NoNewline -Path $LbBodyFile
+
+Write-Host "-- PUT load balancer (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/loadBalancers/$Lb`?api-version=$ApiNetwork" --body "@$LbBodyFile"
+
+Write-Host "-- GET load balancer --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/loadBalancers/$Lb`?api-version=$ApiNetwork"
+
+"{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $RtBodyFile
+'{"properties": {"addressPrefix": "0.0.0.0/0", "nextHopType": "Internet"}}' | Set-Content -NoNewline -Path $RouteBodyFile
+
+Write-Host "-- PUT route table (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/routeTables/$Rt`?api-version=$ApiNetwork" --body "@$RtBodyFile"
+
+Write-Host "-- PUT route (sub-recurso) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/routeTables/$Rt/routes/to-internet`?api-version=$ApiNetwork" --body "@$RouteBodyFile"
+
+Write-Host "-- GET route table (debe traer la route anidada) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/routeTables/$Rt`?api-version=$ApiNetwork"
+
+Write-Host "-- PUT private DNS zone (location forzada a 'global') --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/privateDnsZones/$DnsZone`?api-version=$ApiNetwork" --body "{}"
+
+'{"properties": {"ttl": 300, "aRecords": [{"ipv4Address": "10.0.0.4"}]}}' | Set-Content -NoNewline -Path $DnsRecordBodyFile
+
+Write-Host "-- PUT A record (sub-recurso, recordType en la ruta) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/privateDnsZones/$DnsZone/A/www`?api-version=$ApiNetwork" --body "@$DnsRecordBodyFile"
+
+Write-Host "-- GET private DNS zone (numberOfRecordSets debe ser 1) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/privateDnsZones/$DnsZone`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE A record --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/privateDnsZones/$DnsZone/A/www`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE private DNS zone --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/privateDnsZones/$DnsZone`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE route table --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/routeTables/$Rt`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE load balancer --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/loadBalancers/$Lb`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE public IP address --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/publicIPAddresses/$Pip`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE network security group --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/networkSecurityGroups/$Nsg`?api-version=$ApiNetwork"
+
+Remove-Item -Force $NsgBodyFile, $RuleBodyFile, $PipBodyFile, $LbBodyFile, $RtBodyFile, $RouteBodyFile, $DnsRecordBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

@@ -113,6 +113,11 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.Network", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "virtualNetworks", Locations: []string{"eastus", "westus2"}},
 		{ResourceType: "networkInterfaces", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "networkSecurityGroups", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "publicIPAddresses", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "loadBalancers", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "routeTables", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "privateDnsZones", Locations: []string{"global"}},
 	}},
 	{Namespace: "Microsoft.Compute", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "disks", Locations: []string{"eastus", "westus2"}},

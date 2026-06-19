@@ -59,6 +59,11 @@ func (s *Service) Register(mux *http.ServeMux) {
 		s.deleteSubnet)
 
 	s.registerNICs(mux)
+	s.registerNSGs(mux)
+	s.registerPublicIPs(mux)
+	s.registerLoadBalancers(mux)
+	s.registerRouteTables(mux)
+	s.registerPrivateDNS(mux)
 }
 
 // AddressSpace replica "properties.addressSpace" de una VNet.
@@ -76,8 +81,10 @@ type Subnet struct {
 }
 
 type SubnetProperties struct {
-	ProvisioningState string `json:"provisioningState"`
-	AddressPrefix     string `json:"addressPrefix"`
+	ProvisioningState    string     `json:"provisioningState"`
+	AddressPrefix        string     `json:"addressPrefix"`
+	NetworkSecurityGroup *Reference `json:"networkSecurityGroup,omitempty"`
+	RouteTable           *Reference `json:"routeTable,omitempty"`
 }
 
 // VirtualNetwork replica la forma estándar de ARM para
@@ -107,7 +114,9 @@ type virtualNetworkRequest struct {
 
 type subnetRequest struct {
 	Properties struct {
-		AddressPrefix string `json:"addressPrefix"`
+		AddressPrefix        string     `json:"addressPrefix"`
+		NetworkSecurityGroup *Reference `json:"networkSecurityGroup,omitempty"`
+		RouteTable           *Reference `json:"routeTable,omitempty"`
 	} `json:"properties"`
 }
 
@@ -299,8 +308,10 @@ func (s *Service) putSubnet(w http.ResponseWriter, r *http.Request) {
 		Name: subnetName,
 		Type: "Microsoft.Network/virtualNetworks/subnets",
 		Properties: SubnetProperties{
-			ProvisioningState: "Succeeded",
-			AddressPrefix:     req.Properties.AddressPrefix,
+			ProvisioningState:    "Succeeded",
+			AddressPrefix:        req.Properties.AddressPrefix,
+			NetworkSecurityGroup: req.Properties.NetworkSecurityGroup,
+			RouteTable:           req.Properties.RouteTable,
 		},
 	}
 

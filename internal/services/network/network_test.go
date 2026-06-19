@@ -48,7 +48,9 @@ func TestVirtualNetworkAndSubnetLifecycle(t *testing.T) {
 	var subnet Subnet
 	status = testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(subnetBase), subnetRequest{
 		Properties: struct {
-			AddressPrefix string `json:"addressPrefix"`
+			AddressPrefix        string     `json:"addressPrefix"`
+			NetworkSecurityGroup *Reference `json:"networkSecurityGroup,omitempty"`
+			RouteTable           *Reference `json:"routeTable,omitempty"`
 		}{AddressPrefix: "10.0.1.0/24"},
 	}, &subnet)
 	if status != http.StatusCreated || subnet.Properties.AddressPrefix != "10.0.1.0/24" {
@@ -117,7 +119,9 @@ func TestNetworkInterfaceLifecycle(t *testing.T) {
 	}, nil)
 	testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(vnetBase+"/subnets/subnet1"), subnetRequest{
 		Properties: struct {
-			AddressPrefix string `json:"addressPrefix"`
+			AddressPrefix        string     `json:"addressPrefix"`
+			NetworkSecurityGroup *Reference `json:"networkSecurityGroup,omitempty"`
+			RouteTable           *Reference `json:"routeTable,omitempty"`
 		}{AddressPrefix: "10.0.1.0/24"},
 	}, nil)
 

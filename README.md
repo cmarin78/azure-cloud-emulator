@@ -62,7 +62,11 @@ groups (ARM CRUD, sync), and metric alerts (ARM CRUD, sync) are
 implemented. Phase 11 (App Service) is done: App Service Plans (ARM
 CRUD, sync) and Web Apps (ARM CRUD, sync, plus start/stop/restart
 actions and a `config/appsettings` StringDictionary sub-resource) are
-implemented. See [ROADMAP.md](ROADMAP.md) for the next phases.
+implemented. Phase 12 (Networking) is done: Network Security Groups +
+security rules, Public IP addresses, Load Balancers, Route Tables +
+routes, and Private DNS zones + record sets (all ARM CRUD, sync) are
+implemented, alongside the existing VNet/subnet/NIC resources from
+Phase 4. See [ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -104,6 +108,11 @@ Planned scope (subject to change as work progresses):
 - **App Service**: ✅ App Service Plans (ARM CRUD, sync), ✅ Web Apps
   (ARM CRUD, sync; start/stop/restart actions; `config/appsettings`
   StringDictionary sub-resource with full-replace semantics).
+- **Networking**: ✅ Network Security Groups + security rules (ARM CRUD,
+  sync), ✅ Public IP addresses (ARM CRUD, sync, deterministic fake IP),
+  ✅ Load Balancers (ARM CRUD, sync; inline frontend/backend/rule/probe
+  collections), ✅ Route Tables + routes (ARM CRUD, sync), ✅ Private DNS
+  zones + record sets (ARM CRUD, sync; A/CNAME).
 
 ## Project structure
 
@@ -116,7 +125,7 @@ internal/services/storageaccounts/  Microsoft.Storage/storageAccounts ARM CRUD (
 internal/services/blob/         Blob containers/blobs data-plane (path-style {account}.blob/ endpoint)
 internal/services/queue/        Queue storage data-plane (path-style {account}.queue/ endpoint)
 internal/services/table/        Table storage data-plane (path-style {account}.table/ endpoint)
-internal/services/network/      Microsoft.Network/virtualNetworks, subnets, and networkInterfaces (ARM CRUD)
+internal/services/network/      Microsoft.Network/virtualNetworks, subnets, networkInterfaces, networkSecurityGroups, publicIPAddresses, loadBalancers, routeTables, privateDnsZones (ARM CRUD)
 internal/services/compute/      Microsoft.Compute/disks, VM image catalog, and virtualMachines (ARM CRUD)
 internal/services/keyvault/     Microsoft.KeyVault/vaults (ARM CRUD) + secrets/keys/certificates (path-style {vault}.vault/ data-plane)
 internal/services/servicebus/   Microsoft.ServiceBus/namespaces, queues, topics/subscriptions (ARM CRUD) + messaging (path-style {namespace}.servicebus/ data-plane)
@@ -286,7 +295,14 @@ list/delete, `sharedKeys` action, Log Analytics Query stub, action
 group create/get/list/delete, metric alert create/get/list/delete),
 and App Service (App Service Plan create/get/list/delete, Web App
 create/get/list/delete referencing a plan by id, app settings put/get
-(StringDictionary, full replace), start/stop/restart actions)
+(StringDictionary, full replace), start/stop/restart actions), and
+Networking (NSG create/get/delete, security rule put/get/delete
+(rejecting an out-of-range priority), Public IP create/get/update/
+delete (deterministic fake IP, preserved across updates), Load
+Balancer create/get/delete referencing a Public IP by id plus inline
+frontend/backend/rule, Route Table create/get/delete, route put/get/
+delete (rejecting an unrecognized `nextHopType`), and Private DNS zone
+create/get/delete plus A record put/get/delete)
 end to end against a running emulator instance.
 
 **Terraform** — `terraform/smoke-test/` uses the generic `http` provider
@@ -304,10 +320,13 @@ blob, queue + message, table + entity), virtual network/subnet/NIC/
 disk/VM, Key Vault (+ secret/key/certificate), Service Bus namespace
 (+ queue + message), Cosmos DB account (+ database/container/
 document), a Log Analytics workspace + action group + metric
-alert (referencing the action group by id), and an App Service Plan +
-Web App (referencing the plan by id) + app settings against the
-running emulator, then reads each one back via `data "http"` blocks
-and exposes the parsed JSON as outputs.
+alert (referencing the action group by id), an App Service Plan +
+Web App (referencing the plan by id) + app settings, and Networking
+(NSG + security rule, Public IP, Load Balancer referencing the Public
+IP by id plus inline frontend/backend/rule, Route Table + route, and
+a Private DNS zone + A record) against the running emulator, then
+reads each one back via `data "http"` blocks and exposes the parsed
+JSON as outputs.
 
 **Terraform with the real `azurerm` provider** — `terraform/azurerm-smoke-test/`
 points the actual `hashicorp/azurerm` provider at the emulator (not the

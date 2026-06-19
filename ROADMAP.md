@@ -53,8 +53,13 @@ CRUD, sync, referencing an action group by id) are implemented. Phase
 11 (App Service) is done: App Service Plans (ARM CRUD, sync) and Web
 Apps (ARM CRUD, sync, plus start/stop/restart actions and a
 `config/appsettings` StringDictionary sub-resource with full-replace
-semantics) are implemented. See the table below for the per-phase
-breakdown.
+semantics) are implemented. Phase 12 (Networking) is done: Network
+Security Groups + security rules, Public IP addresses, Load Balancers
+(referencing a public IP and exposing inline frontend/backend/rule
+collections), Route Tables + routes, and Private DNS zones + record
+sets (A/CNAME) are implemented, all within `internal/services/network`
+alongside the existing VNet/subnet/NIC resources. See the table below
+for the per-phase breakdown.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -336,6 +341,48 @@ Plan/site deletes are idempotent (204 if missing, matching resource
 groups' convention); deleting a site also cascades to its app
 settings bucket entry. Confirmed via `appservice_test.go` (`httptest`),
 the `az rest` smoke tests (`scripts/test-az-cli.sh`/`.ps1`), and a real
+`terraform apply`/`destroy` cycle (`terraform/smoke-test/main.tf`, via
+the `http` provider).
+
+## Phase 12 — Networking ✅ completed
+
+Standalone, all within `internal/services/network` alongside the
+existing VNet/subnet/NIC resources from Phase 4. Subnets gained two
+optional reference fields (`networkSecurityGroup`, `routeTable`), with
+no referential integrity enforced — same no-validation convention
+used for Monitor's action-group reference and App Service's
+`serverFarmId`.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| Network Security Groups + security rules (ARM CRUD, sync) | resource groups | `azurerm_network_security_group`/`azurerm_network_security_rule`; security rules are a full ARM sub-resource, independently routable | S | done |
+| Public IP addresses (ARM CRUD, sync) | resource groups | `azurerm_public_ip`; required by Load Balancer frontends | S | done |
+| Load Balancers (ARM CRUD, sync) | Public IP addresses | `azurerm_lb`/`azurerm_lb_backend_address_pool`/`azurerm_lb_rule`; frontend/backend/rule/probe collections are managed inline on the parent resource, not as independent sub-resource routes | M | done |
+| Route Tables + routes (ARM CRUD, sync) | resource groups | `azurerm_route_table`/`azurerm_route`; routes are a full ARM sub-resource, independently routable | S | done |
+| Private DNS zones + record sets (ARM CRUD, sync) | resource groups | `azurerm_private_dns_zone`/`azurerm_private_dns_a_record`/`azurerm_private_dns_cname_record`; record sets use a path-wildcard `{recordType}` segment (A, CNAME) | M | done |
+
+All five are fully synchronous (no LRO), matching the rest of the
+Networking family. Security rules reject priorities outside Azure's
+valid range (100-4096) with 400; routes reject an unrecognized
+`nextHopType` with 400. Public IP addresses get a deterministic fake
+`ipAddress` (FNV-32a hash of the resource's full ARM ID, formatted as
+`20.b2.b3.b4`) assigned on first PUT and preserved across updates,
+mirroring the per-resource deterministic-fake-data pattern already
+used by Monitor's `customerId` and App Service's `defaultHostName`.
+Load Balancer frontend/backend/rule/probe collections are fully
+replaced inline on every PUT of the parent resource — `azurerm`
+manages them that way too, so no independent sub-resource routes are
+exposed for them (unlike NSG security rules and Route Table routes,
+which `azurerm` manages as separate resources and which this emulator
+therefore exposes as separate, independently routable ARM
+sub-resources). Private DNS zones force `location = "global"`
+server-side regardless of what the request body sends, matching real
+Azure; `numberOfRecordSets` is computed from the zone's actual record
+sets rather than tracked separately. NSG and Private DNS zone deletes
+are idempotent (204 if missing, matching resource groups' convention).
+Confirmed via `phase12_test.go` (`httptest`, covering all five
+resources plus the Subnet→NSG/RouteTable reference behavior), the
+`az rest` smoke tests (`scripts/test-az-cli.sh`/`.ps1`), and a real
 `terraform apply`/`destroy` cycle (`terraform/smoke-test/main.tf`, via
 the `http` provider).
 

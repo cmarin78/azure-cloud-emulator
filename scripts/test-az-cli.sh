@@ -588,6 +588,103 @@ echo "-- DELETE App Service Plan --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${PLAN}?api-version=${API_APPSERVICE}"
 
+NSG="smoketestnsg"
+PIP="smoketestpip"
+LB="smoketestlb"
+RT="smoketestrt"
+DNS_ZONE="smoketest.internal"
+
+echo "-- PUT network security group (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}?api-version=${API_NETWORK}" \
+  --body "{\"location\": \"${LOCATION}\"}"
+
+echo "-- GET network security group --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}?api-version=${API_NETWORK}"
+
+echo "-- PUT security rule (sub-recurso) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/securityRules/allow-ssh?api-version=${API_NETWORK}" \
+  --body "{\"properties\": {\"priority\": 100, \"direction\": \"Inbound\", \"access\": \"Allow\", \"protocol\": \"Tcp\", \"sourceAddressPrefix\": \"*\", \"destinationAddressPrefix\": \"*\", \"sourcePortRange\": \"*\", \"destinationPortRange\": \"22\"}}"
+
+echo "-- GET security rule --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/securityRules/allow-ssh?api-version=${API_NETWORK}"
+
+echo "-- PUT public IP address (ARM, sync, IP determinista) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/publicIPAddresses/${PIP}?api-version=${API_NETWORK}" \
+  --body "{\"location\": \"${LOCATION}\"}"
+
+echo "-- GET public IP address --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/publicIPAddresses/${PIP}?api-version=${API_NETWORK}"
+
+PIP_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/publicIPAddresses/${PIP}"
+LB_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/loadBalancers/${LB}"
+
+echo "-- PUT load balancer (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/loadBalancers/${LB}?api-version=${API_NETWORK}" \
+  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"frontendIPConfigurations\": [{\"name\": \"frontend1\", \"properties\": {\"publicIPAddress\": {\"id\": \"${PIP_ID}\"}}}], \"backendAddressPools\": [{\"name\": \"backend1\"}], \"loadBalancingRules\": [{\"name\": \"rule1\", \"properties\": {\"frontendIPConfiguration\": {\"id\": \"${LB_ID}/frontendIPConfigurations/frontend1\"}, \"backendAddressPool\": {\"id\": \"${LB_ID}/backendAddressPools/backend1\"}, \"protocol\": \"Tcp\", \"frontendPort\": 80, \"backendPort\": 8080}}]}}"
+
+echo "-- GET load balancer --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/loadBalancers/${LB}?api-version=${API_NETWORK}"
+
+echo "-- PUT route table (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/routeTables/${RT}?api-version=${API_NETWORK}" \
+  --body "{\"location\": \"${LOCATION}\"}"
+
+echo "-- PUT route (sub-recurso) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/routeTables/${RT}/routes/to-internet?api-version=${API_NETWORK}" \
+  --body "{\"properties\": {\"addressPrefix\": \"0.0.0.0/0\", \"nextHopType\": \"Internet\"}}"
+
+echo "-- GET route table (debe traer la route anidada) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/routeTables/${RT}?api-version=${API_NETWORK}"
+
+echo "-- PUT private DNS zone (location forzada a 'global') --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/privateDnsZones/${DNS_ZONE}?api-version=${API_NETWORK}" \
+  --body "{}"
+
+echo "-- PUT A record (sub-recurso, recordType en la ruta) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/privateDnsZones/${DNS_ZONE}/A/www?api-version=${API_NETWORK}" \
+  --body "{\"properties\": {\"ttl\": 300, \"aRecords\": [{\"ipv4Address\": \"10.0.0.4\"}]}}"
+
+echo "-- GET private DNS zone (numberOfRecordSets debe ser 1) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/privateDnsZones/${DNS_ZONE}?api-version=${API_NETWORK}"
+
+echo "-- DELETE A record --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/privateDnsZones/${DNS_ZONE}/A/www?api-version=${API_NETWORK}"
+
+echo "-- DELETE private DNS zone --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/privateDnsZones/${DNS_ZONE}?api-version=${API_NETWORK}"
+
+echo "-- DELETE route table --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/routeTables/${RT}?api-version=${API_NETWORK}"
+
+echo "-- DELETE load balancer --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/loadBalancers/${LB}?api-version=${API_NETWORK}"
+
+echo "-- DELETE public IP address --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/publicIPAddresses/${PIP}?api-version=${API_NETWORK}"
+
+echo "-- DELETE network security group --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}?api-version=${API_NETWORK}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

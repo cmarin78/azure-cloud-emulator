@@ -132,6 +132,31 @@ variable "app_service_site" {
   default = "tfsmokesite"
 }
 
+variable "nsg" {
+  type    = string
+  default = "tfsmokensg"
+}
+
+variable "public_ip" {
+  type    = string
+  default = "tfsmokepip"
+}
+
+variable "load_balancer" {
+  type    = string
+  default = "tfsmokelb"
+}
+
+variable "route_table" {
+  type    = string
+  default = "tfsmokert"
+}
+
+variable "private_dns_zone" {
+  type    = string
+  default = "tfsmoke.internal"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -142,6 +167,8 @@ locals {
   nic_id              = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkInterfaces/${var.nic}"
   action_group_id     = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/actionGroups/${var.action_group}"
   app_service_plan_id = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.app_service_plan}"
+  public_ip_id        = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/publicIPAddresses/${var.public_ip}"
+  load_balancer_id    = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/loadBalancers/${var.load_balancer}"
 }
 
 # PUT resource group (data source con `http` no soporta PUT, así que usamos
@@ -548,6 +575,107 @@ resource "null_resource" "app_service_settings" {
   }
 }
 
+# Fase 12 (Networking): NSG + regla, Public IP, Load Balancer (referencia
+# la public IP por id), Route Table + ruta, y Private DNS zone + registro A.
+# Mismo patrón null_resource + local-exec del resto del archivo.
+resource "null_resource" "nsg" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    nsg = var.nsg
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkSecurityGroups/${var.nsg}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\"}'"
+  }
+}
+
+resource "null_resource" "nsg_rule" {
+  depends_on = [null_resource.nsg]
+  triggers = {
+    rule = "allow-ssh"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkSecurityGroups/${var.nsg}/securityRules/allow-ssh?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"properties\": {\"priority\": 100, \"direction\": \"Inbound\", \"access\": \"Allow\", \"protocol\": \"Tcp\", \"sourceAddressPrefix\": \"*\", \"destinationAddressPrefix\": \"*\", \"sourcePortRange\": \"*\", \"destinationPortRange\": \"22\"}}'"
+  }
+}
+
+resource "null_resource" "public_ip" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    pip = var.public_ip
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/publicIPAddresses/${var.public_ip}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\"}'"
+  }
+}
+
+resource "null_resource" "load_balancer" {
+  depends_on = [null_resource.public_ip]
+  triggers = {
+    lb = var.load_balancer
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/loadBalancers/${var.load_balancer}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"properties\": {\"frontendIPConfigurations\": [{\"name\": \"frontend1\", \"properties\": {\"publicIPAddress\": {\"id\": \"${local.public_ip_id}\"}}}], \"backendAddressPools\": [{\"name\": \"backend1\"}], \"loadBalancingRules\": [{\"name\": \"rule1\", \"properties\": {\"frontendIPConfiguration\": {\"id\": \"${local.load_balancer_id}/frontendIPConfigurations/frontend1\"}, \"backendAddressPool\": {\"id\": \"${local.load_balancer_id}/backendAddressPools/backend1\"}, \"protocol\": \"Tcp\", \"frontendPort\": 80, \"backendPort\": 8080}}]}}'"
+  }
+}
+
+resource "null_resource" "route_table" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    rt = var.route_table
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/routeTables/${var.route_table}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\"}'"
+  }
+}
+
+resource "null_resource" "route" {
+  depends_on = [null_resource.route_table]
+  triggers = {
+    route = "to-internet"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/routeTables/${var.route_table}/routes/to-internet?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"properties\": {\"addressPrefix\": \"0.0.0.0/0\", \"nextHopType\": \"Internet\"}}'"
+  }
+}
+
+# location se fuerza a "global" server-side (ver internal/services/network),
+# así que el body de creación va vacío, igual que en test-az-cli.ps1/.sh.
+resource "null_resource" "private_dns_zone" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    zone = var.private_dns_zone
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/privateDnsZones/${var.private_dns_zone}?api-version=2023-09-01' -ContentType 'application/json' -Body '{}'"
+  }
+}
+
+resource "null_resource" "private_dns_record" {
+  depends_on = [null_resource.private_dns_zone]
+  triggers = {
+    record = "www"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/privateDnsZones/${var.private_dns_zone}/A/www?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"properties\": {\"ttl\": 300, \"aRecords\": [{\"ipv4Address\": \"10.0.0.4\"}]}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -707,6 +835,32 @@ data "http" "app_service_settings" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.app_service_site}/config/appsettings?api-version=2022-03-01"
 }
 
+# Fase 12 (Networking): verificación de lectura, mismo patrón.
+data "http" "nsg" {
+  depends_on = [null_resource.nsg_rule]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkSecurityGroups/${var.nsg}?api-version=2023-09-01"
+}
+
+data "http" "public_ip" {
+  depends_on = [null_resource.public_ip]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/publicIPAddresses/${var.public_ip}?api-version=2023-09-01"
+}
+
+data "http" "load_balancer" {
+  depends_on = [null_resource.load_balancer]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/loadBalancers/${var.load_balancer}?api-version=2023-09-01"
+}
+
+data "http" "route_table" {
+  depends_on = [null_resource.route]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/routeTables/${var.route_table}?api-version=2023-09-01"
+}
+
+data "http" "private_dns_zone" {
+  depends_on = [null_resource.private_dns_record]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/privateDnsZones/${var.private_dns_zone}?api-version=2023-09-01"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -817,4 +971,24 @@ output "app_service_site_response" {
 
 output "app_service_settings_response" {
   value = jsondecode(data.http.app_service_settings.response_body)
+}
+
+output "nsg_response" {
+  value = jsondecode(data.http.nsg.response_body)
+}
+
+output "public_ip_response" {
+  value = jsondecode(data.http.public_ip.response_body)
+}
+
+output "load_balancer_response" {
+  value = jsondecode(data.http.load_balancer.response_body)
+}
+
+output "route_table_response" {
+  value = jsondecode(data.http.route_table.response_body)
+}
+
+output "private_dns_zone_response" {
+  value = jsondecode(data.http.private_dns_zone.response_body)
 }
