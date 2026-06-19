@@ -45,7 +45,12 @@ limitation (az CLI's MSAL instance-discovery check). Phase 9
 `httptest`, `cmd/azure-emulator` has a registration test that
 reproduces `main()`'s full wiring to catch duplicate-route panics, and
 GitHub Actions runs build/vet/test (with `-race`) on every push and
-pull request. See the table below for the per-phase breakdown.
+pull request. Phase 10 (Monitor + Log Analytics) is done: Log
+Analytics workspaces (ARM CRUD, sync, plus a `sharedKeys` action and a
+data-plane Log Analytics Query stub that always returns an empty
+result table), action groups (ARM CRUD, sync), and metric alerts (ARM
+CRUD, sync, referencing an action group by id) are implemented. See
+the table below for the per-phase breakdown.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -264,6 +269,35 @@ subscriptions. Fixed by giving queues and topics distinct key prefixes
 code duplicated the old format, so the fix was self-contained to that
 one file.
 
-Future phases (Monitor/Log Analytics, App Service, AKS, Functions, ARM
-custom roles/RBAC) will be added as unplanned phases once the above is
-solid, the same way gcp-emulator grew past its original 8 phases.
+## Phase 10 — Monitor + Log Analytics ✅ completed
+
+Standalone, no dependency on Compute/Storage beyond a resource group
+(metric alerts reference a resource ID as a "scope" but the emulator
+never validates that the referenced resource actually exists).
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| Log Analytics workspaces (ARM CRUD, sync, plus `sharedKeys` action) | resource groups | `azurerm_log_analytics_workspace`; required by most other Monitor/diagnostics resources in real Azure | S | done |
+| Log Analytics Query stub (data-plane, `POST /v1/workspaces/{workspaceId}/query`) | workspaces | Lets SDKs/tools that issue KQL queries against a workspace get a well-shaped (always-empty) response instead of a connection error | S | done |
+| Action groups (ARM CRUD, sync) | resource groups | `azurerm_monitor_action_group`; referenced by metric alerts | S | done |
+| Metric alerts (ARM CRUD, sync) | action groups | `azurerm_monitor_metric_alert` | S | done |
+
+All four are synchronous (no LRO), matching real Azure for this
+resource family. Workspace defaults: `sku.name = "PerGB2018"`,
+`retentionInDays = 30`, a deterministic per-workspace `customerId`
+(stable across updates). `sharedKeys` mirrors the start/stop
+action-route pattern already used by `compute/vms.go`. `criteria` and
+`actions` on metric alerts, and `emailReceivers` on action groups, are
+persisted as raw JSON (`json.RawMessage`) without ever being evaluated
+— there is no real metrics pipeline behind this, the same way
+gcp-emulator never evaluates `monitoring.AlertPolicy.Conditions`.
+Workspace/action-group/metric-alert deletes are idempotent (204 if
+missing, matching resource groups' convention). Confirmed via
+`monitor_test.go` (`httptest`), the `az rest` smoke tests
+(`scripts/test-az-cli.sh`/`.ps1`), and a real `terraform apply`/
+`destroy` cycle (`terraform/smoke-test/main.tf`, via the `http`
+provider).
+
+Future phases (App Service, AKS, Functions, ARM custom roles/RBAC)
+will be added as unplanned phases once the above is solid, the same
+way gcp-emulator grew past its original 8 phases.

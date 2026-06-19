@@ -107,14 +107,30 @@ variable "cosmos_container" {
   default = "tfsmokecontainer"
 }
 
+variable "workspace" {
+  type    = string
+  default = "tfsmokeworkspace"
+}
+
+variable "action_group" {
+  type    = string
+  default = "tfsmokeactiongroup"
+}
+
+variable "metric_alert" {
+  type    = string
+  default = "tfsmokemetricalert"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
 # nos dé esta cadena automáticamente como atributo — así que se construye
 # igual que en scripts/test-az-cli.sh/.ps1 (SUBNET_ID/NIC_ID).
 locals {
-  subnet_id = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}/subnets/${var.subnet}"
-  nic_id    = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkInterfaces/${var.nic}"
+  subnet_id       = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}/subnets/${var.subnet}"
+  nic_id          = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkInterfaces/${var.nic}"
+  action_group_id = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/actionGroups/${var.action_group}"
 }
 
 # PUT resource group (data source con `http` no soporta PUT, así que usamos
@@ -439,6 +455,48 @@ resource "null_resource" "cosmos_document" {
   }
 }
 
+# Fase 10 (Monitor + Log Analytics): workspace (ARM, síncrono) + action
+# group (ARM, síncrono) + metric alert (ARM, síncrono, referencia el action
+# group por id), mismo patrón null_resource + local-exec del resto del
+# archivo. No hay equivalente de data plane real que verificar más allá del
+# stub de Log Analytics Query (ver dataplane.go) -- queda fuera de este
+# smoke test porque siempre devuelve una tabla vacía sin importar el input.
+resource "null_resource" "workspace" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    workspace = var.workspace
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.OperationalInsights/workspaces/${var.workspace}?api-version=2022-10-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\"}'"
+  }
+}
+
+resource "null_resource" "action_group" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    action_group = var.action_group
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/actionGroups/${var.action_group}?api-version=2021-08-01' -ContentType 'application/json' -Body '{\"location\": \"global\", \"properties\": {\"groupShortName\": \"tfsmoke\", \"emailReceivers\": [{\"name\": \"admin\", \"emailAddress\": \"admin@example.com\"}]}}'"
+  }
+}
+
+resource "null_resource" "metric_alert" {
+  depends_on = [null_resource.action_group, null_resource.nic]
+  triggers = {
+    metric_alert = var.metric_alert
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/metricAlerts/${var.metric_alert}?api-version=2021-08-01' -ContentType 'application/json' -Body '{\"location\": \"global\", \"properties\": {\"severity\": 2, \"scopes\": [\"${local.nic_id}\"], \"criteria\": {\"odata.type\": \"Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria\"}, \"actions\": [{\"actionGroupId\": \"${local.action_group_id}\"}]}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -568,6 +626,21 @@ data "http" "cosmos_document" {
   url        = "${var.endpoint}/${var.cosmos_account}.documents/dbs/${var.cosmos_db}/colls/${var.cosmos_container}/docs/tf-smoke-doc"
 }
 
+data "http" "workspace" {
+  depends_on = [null_resource.workspace]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.OperationalInsights/workspaces/${var.workspace}?api-version=2022-10-01"
+}
+
+data "http" "action_group" {
+  depends_on = [null_resource.action_group]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/actionGroups/${var.action_group}?api-version=2021-08-01"
+}
+
+data "http" "metric_alert" {
+  depends_on = [null_resource.metric_alert]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/metricAlerts/${var.metric_alert}?api-version=2021-08-01"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -654,4 +727,16 @@ output "cosmos_container_response" {
 
 output "cosmos_document_response" {
   value = jsondecode(data.http.cosmos_document.response_body)
+}
+
+output "workspace_response" {
+  value = jsondecode(data.http.workspace.response_body)
+}
+
+output "action_group_response" {
+  value = jsondecode(data.http.action_group.response_body)
+}
+
+output "metric_alert_response" {
+  value = jsondecode(data.http.metric_alert.response_body)
 }

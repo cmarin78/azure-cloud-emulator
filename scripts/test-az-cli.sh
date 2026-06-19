@@ -459,6 +459,74 @@ echo "-- DELETE cuenta de Cosmos DB --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}?api-version=${API_COSMOSDB}"
 
+API_MONITOR="2022-10-01"
+API_INSIGHTS="2021-08-01"
+WORKSPACE="smoketestworkspace"
+ACTION_GROUP="smoketestactiongroup"
+METRIC_ALERT="smoketestmetricalert"
+
+echo "-- PUT Log Analytics workspace (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/${WORKSPACE}?api-version=${API_MONITOR}" \
+  --body "{\"location\": \"${LOCATION}\"}"
+
+echo "-- GET Log Analytics workspace --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/${WORKSPACE}?api-version=${API_MONITOR}"
+
+echo "-- LIST Log Analytics workspaces --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces?api-version=${API_MONITOR}"
+
+echo "-- POST sharedKeys (azurerm_log_analytics_workspace primary/secondary_shared_key) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/${WORKSPACE}/sharedKeys?api-version=${API_MONITOR}"
+
+echo "-- POST Log Analytics query (data plane, stub: siempre vacío) --"
+az rest --method post \
+  --url "${ENDPOINT}/v1/workspaces/smoketest-fake-customer-id/query" \
+  --body "{\"query\": \"AzureActivity | take 1\"}"
+
+echo "-- PUT action group (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/actionGroups/${ACTION_GROUP}?api-version=${API_INSIGHTS}" \
+  --body "{\"location\": \"global\", \"properties\": {\"groupShortName\": \"smoketest\", \"emailReceivers\": [{\"name\": \"admin\", \"emailAddress\": \"admin@example.com\"}]}}"
+
+echo "-- GET action group --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/actionGroups/${ACTION_GROUP}?api-version=${API_INSIGHTS}"
+
+echo "-- LIST action groups --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/actionGroups?api-version=${API_INSIGHTS}"
+
+ACTION_GROUP_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/actionGroups/${ACTION_GROUP}"
+
+echo "-- PUT metric alert (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/metricAlerts/${METRIC_ALERT}?api-version=${API_INSIGHTS}" \
+  --body "{\"location\": \"global\", \"properties\": {\"severity\": 2, \"scopes\": [\"${NIC_ID}\"], \"criteria\": {\"odata.type\": \"Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria\"}, \"actions\": [{\"actionGroupId\": \"${ACTION_GROUP_ID}\"}]}}"
+
+echo "-- GET metric alert --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/metricAlerts/${METRIC_ALERT}?api-version=${API_INSIGHTS}"
+
+echo "-- LIST metric alerts --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/metricAlerts?api-version=${API_INSIGHTS}"
+
+echo "-- DELETE metric alert --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/metricAlerts/${METRIC_ALERT}?api-version=${API_INSIGHTS}"
+
+echo "-- DELETE action group --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/actionGroups/${ACTION_GROUP}?api-version=${API_INSIGHTS}"
+
+echo "-- DELETE Log Analytics workspace --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/${WORKSPACE}?api-version=${API_MONITOR}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

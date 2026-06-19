@@ -55,8 +55,11 @@ package has a Go test file exercising its ARM CRUD and data-plane
 behavior, `cmd/azure-emulator` has a test that reproduces `main()`'s
 full service-registration wiring to catch `http.ServeMux` route
 conflicts, and GitHub Actions runs build/vet/test on every push and
-pull request — see "Running tests" below. See [ROADMAP.md](ROADMAP.md)
-for the next phases.
+pull request — see "Running tests" below. Phase 10 (Monitor + Log
+Analytics) is done: Log Analytics workspaces (ARM CRUD, sync, plus a
+`sharedKeys` action and a data-plane Log Analytics Query stub), action
+groups (ARM CRUD, sync), and metric alerts (ARM CRUD, sync) are
+implemented. See [ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -90,6 +93,11 @@ Planned scope (subject to change as work progresses):
   self-signed TLS, and case-insensitive ARM path matching.
 - ✅ Automated test suite (one `*_test.go` per service package, plus a
   `cmd/azure-emulator` registration test) and GitHub Actions CI.
+- **Monitor + Log Analytics**: ✅ Log Analytics workspaces (ARM CRUD,
+  sync, plus a `sharedKeys` action), ✅ Log Analytics Query data-plane
+  stub (always returns an empty result table), ✅ action groups (ARM
+  CRUD, sync), ✅ metric alerts (ARM CRUD, sync, referencing an action
+  group by id).
 
 ## Project structure
 
@@ -107,6 +115,7 @@ internal/services/compute/      Microsoft.Compute/disks, VM image catalog, and v
 internal/services/keyvault/     Microsoft.KeyVault/vaults (ARM CRUD) + secrets/keys/certificates (path-style {vault}.vault/ data-plane)
 internal/services/servicebus/   Microsoft.ServiceBus/namespaces, queues, topics/subscriptions (ARM CRUD) + messaging (path-style {namespace}.servicebus/ data-plane)
 internal/services/cosmosdb/     Microsoft.DocumentDB/databaseAccounts, sqlDatabases, containers (ARM CRUD) + documents (path-style {account}.documents/ data-plane)
+internal/services/monitor/      Microsoft.OperationalInsights/workspaces + Microsoft.Insights/actionGroups, metricAlerts (ARM CRUD) + Log Analytics Query stub (POST /v1/workspaces/{id}/query)
 internal/services/armmeta/      fake ARM metadata document (/metadata/endpoints) so az CLI/azurerm can discover this emulator as a custom cloud
 internal/services/aadtoken/     fake Azure AD token issuer (/login/{tenant}/oauth2/v2.0/token) accepting any client_id/secret
 internal/services/graph/        minimal Microsoft Graph stub (GET /v1.0/servicePrincipals) so azurerm can resolve a service principal's object ID
@@ -263,9 +272,12 @@ create/get/list/delete, secret put/get/list (list never echoes back
 `value`)/delete, key put/get/list/delete, certificate put/get/list/
 delete), Service Bus (namespace create/get/delete, queue create/delete,
 message send/peek-lock-receive/complete, topic + subscription create/
-delete with fan-out send/receive), and Cosmos DB (account create/get/
+delete with fan-out send/receive), Cosmos DB (account create/get/
 delete, SQL database create/delete, container create/delete, document
-put/get/list/delete) end to end against a running emulator instance.
+put/get/list/delete), and Monitor/Log Analytics (workspace create/get/
+list/delete, `sharedKeys` action, Log Analytics Query stub, action
+group create/get/list/delete, metric alert create/get/list/delete)
+end to end against a running emulator instance.
 
 **Terraform** — `terraform/smoke-test/` uses the generic `http` provider
 plus `local-exec` to verify every REST endpoint responds with the
@@ -280,9 +292,11 @@ terraform apply
 This provisions a resource group, storage account (+ blob container/
 blob, queue + message, table + entity), virtual network/subnet/NIC/
 disk/VM, Key Vault (+ secret/key/certificate), Service Bus namespace
-(+ queue + message), and Cosmos DB account (+ database/container/
-document) against the running emulator, then reads each one back via
-`data "http"` blocks and exposes the parsed JSON as outputs.
+(+ queue + message), Cosmos DB account (+ database/container/
+document), and a Log Analytics workspace + action group + metric
+alert (referencing the action group by id) against the running
+emulator, then reads each one back via `data "http"` blocks and
+exposes the parsed JSON as outputs.
 
 **Terraform with the real `azurerm` provider** — `terraform/azurerm-smoke-test/`
 points the actual `hashicorp/azurerm` provider at the emulator (not the

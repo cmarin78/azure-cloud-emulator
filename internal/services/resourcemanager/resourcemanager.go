@@ -127,6 +127,13 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.DocumentDB", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "databaseAccounts", Locations: []string{"eastus", "westus2"}},
 	}},
+	{Namespace: "Microsoft.OperationalInsights", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "workspaces", Locations: []string{"eastus", "westus2"}},
+	}},
+	{Namespace: "Microsoft.Insights", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "actionGroups", Locations: []string{"global"}},
+		{ResourceType: "metricAlerts", Locations: []string{"global"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

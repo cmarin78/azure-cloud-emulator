@@ -414,6 +414,65 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $CosmosAcctBodyFile, $CosmosDbBodyFile, $CosmosContainerBodyFile -ErrorAction SilentlyContinue
 
+$ApiMonitor = "2022-10-01"
+$ApiInsights = "2021-08-01"
+$Workspace = "smoketestworkspace"
+$ActionGroup = "smoketestactiongroup"
+$MetricAlert = "smoketestmetricalert"
+
+$WorkspaceBodyFile = New-TemporaryFile
+$ActionGroupBodyFile = New-TemporaryFile
+$MetricAlertBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $WorkspaceBodyFile
+'{"location": "global", "properties": {"groupShortName": "smoketest", "emailReceivers": [{"name": "admin", "emailAddress": "admin@example.com"}]}}' | Set-Content -NoNewline -Path $ActionGroupBodyFile
+
+$ActionGroupId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups/$ActionGroup"
+"{`"location`": `"global`", `"properties`": {`"severity`": 2, `"scopes`": [`"$NicId`"], `"criteria`": {`"odata.type`": `"Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria`"}, `"actions`": [{`"actionGroupId`": `"$ActionGroupId`"}]}}" | Set-Content -NoNewline -Path $MetricAlertBodyFile
+
+Write-Host "-- PUT Log Analytics workspace (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.OperationalInsights/workspaces/$Workspace`?api-version=$ApiMonitor" --body "@$WorkspaceBodyFile"
+
+Write-Host "-- GET Log Analytics workspace --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.OperationalInsights/workspaces/$Workspace`?api-version=$ApiMonitor"
+
+Write-Host "-- LIST Log Analytics workspaces --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.OperationalInsights/workspaces`?api-version=$ApiMonitor"
+
+Write-Host "-- POST sharedKeys (azurerm_log_analytics_workspace primary/secondary_shared_key) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.OperationalInsights/workspaces/$Workspace/sharedKeys`?api-version=$ApiMonitor"
+
+Write-Host "-- POST Log Analytics query (data plane, stub: siempre vacío) --"
+Invoke-RestMethod -Method Post -Uri "$Endpoint/v1/workspaces/smoketest-fake-customer-id/query" -ContentType "application/json" -Body '{"query": "AzureActivity | take 1"}' | ConvertTo-Json -Depth 10
+
+Write-Host "-- PUT action group (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups/$ActionGroup`?api-version=$ApiInsights" --body "@$ActionGroupBodyFile"
+
+Write-Host "-- GET action group --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups/$ActionGroup`?api-version=$ApiInsights"
+
+Write-Host "-- LIST action groups --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups`?api-version=$ApiInsights"
+
+Write-Host "-- PUT metric alert (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/metricAlerts/$MetricAlert`?api-version=$ApiInsights" --body "@$MetricAlertBodyFile"
+
+Write-Host "-- GET metric alert --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/metricAlerts/$MetricAlert`?api-version=$ApiInsights"
+
+Write-Host "-- LIST metric alerts --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/metricAlerts`?api-version=$ApiInsights"
+
+Write-Host "-- DELETE metric alert --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/metricAlerts/$MetricAlert`?api-version=$ApiInsights"
+
+Write-Host "-- DELETE action group --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups/$ActionGroup`?api-version=$ApiInsights"
+
+Write-Host "-- DELETE Log Analytics workspace --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.OperationalInsights/workspaces/$Workspace`?api-version=$ApiMonitor"
+
+Remove-Item -Force $WorkspaceBodyFile, $ActionGroupBodyFile, $MetricAlertBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

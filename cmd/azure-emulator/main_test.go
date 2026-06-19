@@ -24,6 +24,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
 	"github.com/cesarmarin/azure-emulator/internal/services/graph"
 	"github.com/cesarmarin/azure-emulator/internal/services/keyvault"
+	"github.com/cesarmarin/azure-emulator/internal/services/monitor"
 	"github.com/cesarmarin/azure-emulator/internal/services/network"
 	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
 	"github.com/cesarmarin/azure-emulator/internal/services/servicebus"
@@ -59,6 +60,7 @@ func TestAllServicesRegisterWithoutPanic(t *testing.T) {
 	serviceBusSvc.Register(mux)
 	cosmosSvc := cosmosdb.New(db, ops)
 	cosmosSvc.Register(mux)
+	monitor.New(db).Register(mux)
 	registerDataPlane(mux, db, keyVaultSvc, serviceBusSvc, cosmosSvc)
 
 	armmeta.New().Register(mux, "http://localhost:10000")
