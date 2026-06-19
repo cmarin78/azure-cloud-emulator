@@ -81,6 +81,31 @@ variable "tenant_id" {
   default = "00000000-0000-0000-0000-000000000000"
 }
 
+variable "sb_namespace" {
+  type    = string
+  default = "tfsmokesbns"
+}
+
+variable "sb_queue" {
+  type    = string
+  default = "tf-smoke-sbqueue"
+}
+
+variable "cosmos_account" {
+  type    = string
+  default = "tfsmokecosmos"
+}
+
+variable "cosmos_db" {
+  type    = string
+  default = "tfsmokedb"
+}
+
+variable "cosmos_container" {
+  type    = string
+  default = "tfsmokecontainer"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -323,6 +348,96 @@ resource "null_resource" "certificate" {
   }
 }
 
+# Fase 6 (Service Bus): namespace (ARM, asíncrono) + queue (ARM, síncrono)
+# + mensaje (data plane bajo {namespace}.servicebus/...), mismo patrón
+# null_resource + local-exec del resto del archivo.
+resource "null_resource" "sb_namespace" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    namespace = var.sb_namespace
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ServiceBus/namespaces/${var.sb_namespace}?api-version=2021-11-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\"}'"
+  }
+}
+
+resource "null_resource" "sb_queue" {
+  depends_on = [null_resource.sb_namespace]
+  triggers = {
+    queue = var.sb_queue
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ServiceBus/namespaces/${var.sb_namespace}/queues/${var.sb_queue}?api-version=2021-11-01' -ContentType 'application/json' -Body '{\"properties\": {}}'"
+  }
+}
+
+resource "null_resource" "sb_message" {
+  depends_on = [null_resource.sb_queue]
+  triggers = {
+    message = "hola mundo desde terraform (service bus)"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Post -Uri '${var.endpoint}/${var.sb_namespace}.servicebus/${var.sb_queue}/messages' -ContentType 'application/json' -Body '{\"body\": \"hola mundo desde terraform (service bus)\"}'"
+  }
+}
+
+# Fase 6 (Cosmos DB): account (ARM, asíncrono) + sqlDatabase + container
+# (ARM, síncronos) + documento (data plane bajo {account}.documents/...),
+# mismo patrón null_resource + local-exec del resto del archivo.
+resource "null_resource" "cosmos_account" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    account = var.cosmos_account
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.DocumentDB/databaseAccounts/${var.cosmos_account}?api-version=2023-04-15' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\"}'"
+  }
+}
+
+resource "null_resource" "cosmos_db" {
+  depends_on = [null_resource.cosmos_account]
+  triggers = {
+    db = var.cosmos_db
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.DocumentDB/databaseAccounts/${var.cosmos_account}/sqlDatabases/${var.cosmos_db}?api-version=2023-04-15' -ContentType 'application/json' -Body '{\"properties\": {\"resource\": {\"id\": \"${var.cosmos_db}\"}}}'"
+  }
+}
+
+resource "null_resource" "cosmos_container" {
+  depends_on = [null_resource.cosmos_db]
+  triggers = {
+    container = var.cosmos_container
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.DocumentDB/databaseAccounts/${var.cosmos_account}/sqlDatabases/${var.cosmos_db}/containers/${var.cosmos_container}?api-version=2023-04-15' -ContentType 'application/json' -Body '{\"properties\": {\"resource\": {\"id\": \"${var.cosmos_container}\", \"partitionKey\": {\"paths\": [\"/pk\"]}}}}'"
+  }
+}
+
+resource "null_resource" "cosmos_document" {
+  depends_on = [null_resource.cosmos_container]
+  triggers = {
+    doc = "tf-smoke-doc"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/${var.cosmos_account}.documents/dbs/${var.cosmos_db}/colls/${var.cosmos_container}/docs/tf-smoke-doc' -ContentType 'application/json' -Body '{\"pk\": \"x\", \"origin\": \"terraform\"}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -424,6 +539,34 @@ data "http" "certificate" {
   url        = "${var.endpoint}/${var.vault}.vault/certificates/tf-smoke-cert"
 }
 
+data "http" "sb_namespace" {
+  depends_on = [null_resource.sb_namespace]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ServiceBus/namespaces/${var.sb_namespace}?api-version=2021-11-01"
+}
+
+# peeklock=true reserva el mensaje (no es idempotente como el peekonly de
+# queue storage), pero al ser una data source solo se evalúa una vez por
+# `terraform apply`, igual que el resto de las data sources de este archivo.
+data "http" "sb_message_peek" {
+  depends_on = [null_resource.sb_message]
+  url        = "${var.endpoint}/${var.sb_namespace}.servicebus/${var.sb_queue}/messages?peeklock=true"
+}
+
+data "http" "cosmos_account" {
+  depends_on = [null_resource.cosmos_account]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.DocumentDB/databaseAccounts/${var.cosmos_account}?api-version=2023-04-15"
+}
+
+data "http" "cosmos_container" {
+  depends_on = [null_resource.cosmos_container]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.DocumentDB/databaseAccounts/${var.cosmos_account}/sqlDatabases/${var.cosmos_db}/containers/${var.cosmos_container}?api-version=2023-04-15"
+}
+
+data "http" "cosmos_document" {
+  depends_on = [null_resource.cosmos_document]
+  url        = "${var.endpoint}/${var.cosmos_account}.documents/dbs/${var.cosmos_db}/colls/${var.cosmos_container}/docs/tf-smoke-doc"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -490,4 +633,24 @@ output "key_response" {
 
 output "certificate_response" {
   value = jsondecode(data.http.certificate.response_body)
+}
+
+output "sb_namespace_response" {
+  value = jsondecode(data.http.sb_namespace.response_body)
+}
+
+output "sb_message_peek_response" {
+  value = jsondecode(data.http.sb_message_peek.response_body)
+}
+
+output "cosmos_account_response" {
+  value = jsondecode(data.http.cosmos_account.response_body)
+}
+
+output "cosmos_container_response" {
+  value = jsondecode(data.http.cosmos_container.response_body)
+}
+
+output "cosmos_document_response" {
+  value = jsondecode(data.http.cosmos_document.response_body)
 }

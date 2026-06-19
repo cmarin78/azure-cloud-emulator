@@ -335,6 +335,130 @@ echo "-- DELETE key vault --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${VAULT}?api-version=${API_KEYVAULT}"
 
+API_SERVICEBUS="2021-11-01"
+NAMESPACE="smoketestns"
+QUEUE_SB="smoketest-sbqueue"
+TOPIC="smoketest-topic"
+SUBSCRIPTION="smoketest-sub"
+
+echo "-- PUT Service Bus namespace (async, 202) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}?api-version=${API_SERVICEBUS}" \
+  --body "{\"location\": \"${LOCATION}\"}"
+
+echo "-- GET Service Bus namespace --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}?api-version=${API_SERVICEBUS}"
+
+echo "-- PUT Service Bus queue --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}/queues/${QUEUE_SB}?api-version=${API_SERVICEBUS}" \
+  --body "{\"properties\": {}}"
+
+echo "-- SEND mensaje a la cola (data plane) --"
+az rest --method post \
+  --url "${ENDPOINT}/${NAMESPACE}.servicebus/${QUEUE_SB}/messages" \
+  --body "{\"body\": \"hola desde Service Bus\"}"
+
+echo "-- RECEIVE mensaje (peek-lock) --"
+SB_RESPONSE=$(az rest --method get \
+  --url "${ENDPOINT}/${NAMESPACE}.servicebus/${QUEUE_SB}/messages?peeklock=true")
+echo "${SB_RESPONSE}"
+SB_MESSAGE_ID=$(echo "${SB_RESPONSE}" | sed -n 's/.*"messageId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+SB_LOCK_TOKEN=$(echo "${SB_RESPONSE}" | sed -n 's/.*"lockToken"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+echo "-- COMPLETE mensaje (requiere lockToken de la última recepción) --"
+az rest --method delete \
+  --url "${ENDPOINT}/${NAMESPACE}.servicebus/${QUEUE_SB}/messages/${SB_MESSAGE_ID}?lockToken=${SB_LOCK_TOKEN}"
+
+echo "-- DELETE Service Bus queue --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}/queues/${QUEUE_SB}?api-version=${API_SERVICEBUS}"
+
+echo "-- PUT Service Bus topic --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}/topics/${TOPIC}?api-version=${API_SERVICEBUS}" \
+  --body "{\"properties\": {}}"
+
+echo "-- PUT Service Bus subscription --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}/topics/${TOPIC}/subscriptions/${SUBSCRIPTION}?api-version=${API_SERVICEBUS}" \
+  --body "{\"properties\": {}}"
+
+echo "-- SEND mensaje al topic (fan-out a sus subscriptions) --"
+az rest --method post \
+  --url "${ENDPOINT}/${NAMESPACE}.servicebus/${TOPIC}/messages" \
+  --body "{\"body\": \"hola desde el topic\"}"
+
+echo "-- RECEIVE mensaje desde la subscription --"
+az rest --method get \
+  --url "${ENDPOINT}/${NAMESPACE}.servicebus/${TOPIC}/subscriptions/${SUBSCRIPTION}/messages?peeklock=true"
+
+echo "-- DELETE Service Bus subscription --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}/topics/${TOPIC}/subscriptions/${SUBSCRIPTION}?api-version=${API_SERVICEBUS}"
+
+echo "-- DELETE Service Bus topic --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}/topics/${TOPIC}?api-version=${API_SERVICEBUS}"
+
+echo "-- DELETE Service Bus namespace --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}?api-version=${API_SERVICEBUS}"
+
+API_COSMOSDB="2023-04-15"
+COSMOS_ACCOUNT="smoketestcosmos"
+COSMOS_DB="smoketestdb"
+COSMOS_CONTAINER="smoketestcontainer"
+
+echo "-- PUT cuenta de Cosmos DB (async, 202) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}?api-version=${API_COSMOSDB}" \
+  --body "{\"location\": \"${LOCATION}\"}"
+
+echo "-- GET cuenta de Cosmos DB --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}?api-version=${API_COSMOSDB}"
+
+echo "-- PUT base de datos SQL --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}/sqlDatabases/${COSMOS_DB}?api-version=${API_COSMOSDB}" \
+  --body "{\"properties\": {\"resource\": {\"id\": \"${COSMOS_DB}\"}}}"
+
+echo "-- PUT container (requiere partitionKey) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}/sqlDatabases/${COSMOS_DB}/containers/${COSMOS_CONTAINER}?api-version=${API_COSMOSDB}" \
+  --body "{\"properties\": {\"resource\": {\"id\": \"${COSMOS_CONTAINER}\", \"partitionKey\": {\"paths\": [\"/pk\"]}}}}"
+
+echo "-- PUT documento (data plane) --"
+az rest --method put \
+  --url "${ENDPOINT}/${COSMOS_ACCOUNT}.documents/dbs/${COSMOS_DB}/colls/${COSMOS_CONTAINER}/docs/smoketest-doc" \
+  --body "{\"pk\": \"x\", \"value\": 42}"
+
+echo "-- GET documento --"
+az rest --method get \
+  --url "${ENDPOINT}/${COSMOS_ACCOUNT}.documents/dbs/${COSMOS_DB}/colls/${COSMOS_CONTAINER}/docs/smoketest-doc"
+
+echo "-- LIST documentos del container --"
+az rest --method get \
+  --url "${ENDPOINT}/${COSMOS_ACCOUNT}.documents/dbs/${COSMOS_DB}/colls/${COSMOS_CONTAINER}/docs"
+
+echo "-- DELETE documento --"
+az rest --method delete \
+  --url "${ENDPOINT}/${COSMOS_ACCOUNT}.documents/dbs/${COSMOS_DB}/colls/${COSMOS_CONTAINER}/docs/smoketest-doc"
+
+echo "-- DELETE container --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}/sqlDatabases/${COSMOS_DB}/containers/${COSMOS_CONTAINER}?api-version=${API_COSMOSDB}"
+
+echo "-- DELETE base de datos SQL --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}/sqlDatabases/${COSMOS_DB}?api-version=${API_COSMOSDB}"
+
+echo "-- DELETE cuenta de Cosmos DB --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}?api-version=${API_COSMOSDB}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

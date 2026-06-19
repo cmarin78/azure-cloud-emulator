@@ -31,7 +31,12 @@ managed disks, a static VM image catalog, and virtual machines
 (create/get/delete, start/stop, all async) are implemented. Phase 5
 (Key Vault) is done: vault ARM CRUD plus secrets/keys/certificates
 (all data-plane, with simulated cryptographic material) are
-implemented. See [ROADMAP.md](ROADMAP.md) for the next phases.
+implemented. Phase 6 (Service Bus + Cosmos DB) is done: Service Bus
+namespaces (ARM, async), queues and topics/subscriptions (ARM, sync)
+plus message send/peek-lock-receive/complete (data-plane); Cosmos DB
+SQL API accounts (ARM, async), databases and containers (ARM, sync)
+plus document CRUD (data-plane). See [ROADMAP.md](ROADMAP.md) for the
+next phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -50,8 +55,13 @@ Planned scope (subject to change as work progresses):
   delete, start/stop — all async, matching real Azure's LRO pattern).
 - **Resource Manager**: ✅ resource groups, fake subscriptions, ARM-style
   long-running operations.
-- **Service Bus**: queues and topics/subscriptions (basic send/receive).
-- **Cosmos DB**: SQL API, basic container/document CRUD.
+- **Service Bus**: ✅ namespaces (ARM CRUD, async), ✅ queues and topics/
+  subscriptions (ARM CRUD, sync), ✅ message send/peek-lock-receive/
+  complete (data-plane, with topic-to-subscriptions fan-out).
+- **Cosmos DB**: ✅ SQL API accounts (ARM CRUD, async), ✅ databases and
+  containers (ARM CRUD, sync, partition key required), ✅ document CRUD
+  (data-plane: put/create/get/list/delete, simplified vs real Azure —
+  plain JSON body instead of partition-key headers).
 - Web console for browsing emulated resources.
 
 ## Project structure
@@ -68,6 +78,8 @@ internal/services/table/        Table storage data-plane (path-style {account}.t
 internal/services/network/      Microsoft.Network/virtualNetworks, subnets, and networkInterfaces (ARM CRUD)
 internal/services/compute/      Microsoft.Compute/disks, VM image catalog, and virtualMachines (ARM CRUD)
 internal/services/keyvault/     Microsoft.KeyVault/vaults (ARM CRUD) + secrets/keys/certificates (path-style {vault}.vault/ data-plane)
+internal/services/servicebus/   Microsoft.ServiceBus/namespaces, queues, topics/subscriptions (ARM CRUD) + messaging (path-style {namespace}.servicebus/ data-plane)
+internal/services/cosmosdb/     Microsoft.DocumentDB/databaseAccounts, sqlDatabases, containers (ARM CRUD) + documents (path-style {account}.documents/ data-plane)
 docs/                            banner and other documentation assets
 scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator
 terraform/smoke-test/            minimal Terraform config exercising the emulator's REST endpoints
@@ -104,63 +116,3 @@ latter is what the Docker image uses).
 ```bash
 docker compose up --build
 ```
-
-This builds the image (multi-stage: `golang:1.22-alpine` for compiling,
-`alpine:3.20` for the runtime) and starts a container listening on
-`localhost:10000`, persisting its BoltDB file to a named volume
-(`emulator-data`) so data survives restarts.
-
-Without compose:
-
-```bash
-docker build -t azure-emulator:local .
-docker run --rm -p 10000:10000 -v emulator-data:/data azure-emulator:local
-```
-
-## Testing with az CLI and Terraform
-
-Every service ships with a way to exercise it from real tooling, not just
-`curl`.
-
-**az CLI** — az CLI (and the `azurerm` Terraform provider) normally expect
-to discover ARM metadata and authenticate against real Azure AD before
-issuing any request, neither of which this emulator implements yet. The
-practical workaround is [`az rest`](https://learn.microsoft.com/cli/azure/reference-index#az-rest),
-which reuses your cached `az login` token but lets you target any URL,
-including `localhost`:
-
-```bash
-az login                       # once, any account/tenant works
-./scripts/test-az-cli.sh       # or test-az-cli.ps1 on Windows
-```
-
-This exercises subscription auto-vivification, resource group CRUD,
-storage account CRUD, blob container/blob CRUD (create container,
-upload/list/download/delete blob, delete container), queue storage
-(create queue, put/peek/get(dequeue)/delete message, delete queue),
-table storage (create table, insert/get/query/merge/delete entity,
-delete table), and Compute/Network (virtual network + subnet CRUD,
-network interface CRUD, managed disk CRUD, VM image catalog lookup,
-virtual machine create/get/start/powerOff/delete — confirming the VM
-response never echoes back `adminPassword`), and Key Vault (vault
-create/get/list/delete, secret put/get/list (list never echoes back
-`value`)/delete, key put/get/list/delete, certificate put/get/list/
-delete) end to end against a running emulator instance.
-
-**Terraform** — pointing the real `azurerm` provider at the emulator
-won't work yet (same metadata/AAD discovery problem). `terraform/smoke-test/`
-uses the generic `http` provider plus `local-exec` instead, to verify the
-REST endpoints respond with the expected shape:
-
-```bash
-cd terraform/smoke-test
-terraform init
-terraform apply
-```
-
-Full `azurerm` provider compatibility (fake ARM metadata endpoint + fake
-AAD token issuer) is tracked as future work in [ROADMAP.md](ROADMAP.md).
-
-## License
-
-MIT — see [LICENSE](LICENSE).

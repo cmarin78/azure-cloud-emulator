@@ -11,10 +11,12 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/server"
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
+	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
 	"github.com/cesarmarin/azure-emulator/internal/services/keyvault"
 	"github.com/cesarmarin/azure-emulator/internal/services/network"
 	"github.com/cesarmarin/azure-emulator/internal/services/queue"
 	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
+	"github.com/cesarmarin/azure-emulator/internal/services/servicebus"
 	"github.com/cesarmarin/azure-emulator/internal/services/storageaccounts"
 	"github.com/cesarmarin/azure-emulator/internal/services/table"
 	"github.com/cesarmarin/azure-emulator/internal/storage"
@@ -53,11 +55,11 @@ func main() {
 	compute.New(db, ops, networkSvc).Register(srv.Mux())
 	keyVaultSvc := keyvault.New(db)
 	keyVaultSvc.Register(srv.Mux())
-	registerDataPlane(srv.Mux(), db, keyVaultSvc)
-
-	// TODO: register more ARM control-plane service packages here as
-	// they're implemented (Service Bus, Cosmos DB, ...), following the
-	// internal/services/<name>.New(db, [ops]).Register(mux) pattern.
+	serviceBusSvc := servicebus.New(db, ops)
+	serviceBusSvc.Register(srv.Mux())
+	cosmosSvc := cosmosdb.New(db, ops)
+	cosmosSvc.Register(srv.Mux())
+	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc)
 
 	log.Printf("azure-emulator listening on %s (data: %s)", *addr, *dbPath)
 	if err := http.ListenAndServe(*addr, srv.Handler()); err != nil {
@@ -66,16 +68,16 @@ func main() {
 }
 
 // registerDataPlane monta el dispatcher compartido para los servicios de
-// data plane "path-style" (blob, queue, y eventualmente table). Todos
-// sirven bajo el shape "/{account}.{servicio}/{resto-del-path}", que en
-// net/http.ServeMux es exactamente el mismo patrón de wildcards
+// data plane "path-style" (blob, queue, table, Service Bus y Cosmos DB).
+// Todos sirven bajo el shape "/{account}.{servicio}/{resto-del-path}", que
+// en net/http.ServeMux es exactamente el mismo patrón de wildcards
 // ("/{x}/{y...}") sin importar el nombre que cada paquete le dé a su
 // wildcard — registrar uno por servicio (como hace cada ARM control-plane
 // service con su propio Register) provoca un panic en tiempo de arranque
 // ("conflicts with pattern"). Por eso este es el único lugar que llama
 // mux.HandleFunc para estos servicios: lee el primer segmento del path
 // una vez y despacha por sufijo al ServeHTTP del servicio que corresponda.
-func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault.Service) {
+func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault.Service, serviceBusSvc *servicebus.Service, cosmosSvc *cosmosdb.Service) {
 	blobSvc := blob.New(db)
 	queueSvc := queue.New(db)
 	tableSvc := table.New(db)
@@ -85,15 +87,4 @@ func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault
 		switch {
 		case strings.HasSuffix(accountResource, ".blob"):
 			blobSvc.ServeHTTP(w, r)
-		case strings.HasSuffix(accountResource, ".queue"):
-			queueSvc.ServeHTTP(w, r)
-		case strings.HasSuffix(accountResource, ".table"):
-			tableSvc.ServeHTTP(w, r)
-		case strings.HasSuffix(accountResource, ".vault"):
-			keyVaultSvc.ServeHTTP(w, r)
-		default:
-			server.WriteError(w, http.StatusNotFound, "ResourceNotFound",
-				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...', '{account}.queue/...', '{account}.table/...' o '{vault}.vault/...'")
-		}
-	})
-}
+		case strings.HasSuffix(accountResource, "

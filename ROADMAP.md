@@ -28,7 +28,11 @@ network interfaces, managed disks, a static VM image catalog, and
 virtual machines (create/get/delete, start/stop) are implemented.
 Phase 5 (Key Vault) is done: vault ARM CRUD plus secrets/keys/
 certificates (data-plane, simulated cryptographic material) are
-implemented — see the table below.
+implemented. Phase 6 (Messaging and data) is done: Service Bus
+namespaces/queues/topics/subscriptions (ARM CRUD) plus message send/
+peek-lock-receive/complete (data-plane), and Cosmos DB SQL API
+accounts/databases/containers (ARM CRUD) plus document CRUD
+(data-plane) are implemented — see the table below.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -44,6 +48,15 @@ Each service is now also covered by an `az rest` smoke test
 (`terraform/smoke-test/`, using the `http` provider since `azurerm`
 needs ARM metadata discovery + real AAD this emulator doesn't
 implement yet).
+
+Note on Service Bus/Cosmos DB data-plane: like the path-style services
+above, `{namespace}.servicebus/...` and `{account}.documents/...` are
+also routed through the same shared `registerDataPlane` dispatcher.
+Both also need a small flat existence-index bucket
+(`servicebus.dataplane.entities`, `cosmosdb.dataplane.containers`)
+kept in sync with ARM CRUD, since data-plane URLs for these services
+don't carry subscriptionId/resourceGroup the way the ARM bucket keys
+do.
 
 ## Phase 0 — Bootstrap ✅ completed
 
@@ -109,52 +122,4 @@ Target (still open): `terraform apply`/`destroy` against the real
 `azurerm_virtual_network` + `azurerm_network_interface` +
 `azurerm_linux_virtual_machine` resources, without provider patches —
 blocked on the fake ARM metadata/AAD work tracked below, same as the
-`azurerm_storage_account` equivalent in Phase 3.
-
-## Phase 5 — Key Vault ✅ completed
-
-Standalone, no dependency on Compute/Storage beyond a resource group.
-
-| Resource | Depends on | Why | Effort | Status |
-|---|---|---|---|---|
-| Vaults (ARM-level CRUD) | resource groups | `azurerm_key_vault` | S | done |
-| Secrets (CRUD) | vaults | `azurerm_key_vault_secret`; most common use case | S | done |
-| Keys (CRUD, basic ops) | vaults | `azurerm_key_vault_key` | M | done |
-| Certificates (CRUD, basic ops) | vaults | `azurerm_key_vault_certificate` | M | done |
-
-Keys and certificates don't implement real cryptographic operations
-(sign/encrypt/wrapKey/X.509) — they generate random bytes via
-`crypto/rand` to populate JWK fields (`n`/`e`) or certificate fields
-(`cer`/`x5t` thumbprint), which is enough for `az`/Terraform to
-create/read/list/delete them end to end. Secrets follow the same
-list-never-echoes-the-value convention as the real API. Vault deletes
-are idempotent (204 if missing, matching resource groups' convention);
-secret/key/certificate deletes return 404 if missing (matching queue
-storage's data-plane convention).
-
-## Phase 6 — Messaging and data
-
-Independent of each other; each is a new package similar in size to
-Storage.
-
-| Service | Minimum resources | Effort | Status |
-|---|---|---|---|
-| Service Bus | namespaces, queues, topics/subscriptions, send/receive | M | — |
-| Cosmos DB (SQL API) | accounts, databases, containers, document CRUD | L | — |
-
-## Phase 7 — Web console
-
-| Component | Note | Effort | Status |
-|---|---|---|---|
-| Minimal UI (`web/console`) | Browse resource groups, storage, VMs, vaults — scoped to whatever's implemented | M | — |
-
-Future phases (Monitor/Log Analytics, App Service, AKS, Functions, ARM
-custom roles/RBAC) will be added as unplanned phases once the above is
-solid, the same way gcp-emulator grew past its original 8 phases.
-
-Also tracked as future work: a fake ARM metadata endpoint
-(`/metadata/endpoints`) plus a fake Azure AD token issuer, which would
-let `az cloud register` and the real `azurerm` Terraform provider point
-at this emulator directly instead of relying on `az rest`/the `http`
-provider for testing (see "Testing with az CLI and Terraform" in
-README.md).
+`azurerm

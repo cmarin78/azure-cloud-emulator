@@ -305,6 +305,115 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $VaultBodyFile -ErrorAction SilentlyContinue
 
+$ApiServiceBus = "2021-11-01"
+$Namespace = "smoketestns"
+$QueueSb = "smoketest-sbqueue"
+$Topic = "smoketest-topic"
+$Subscription = "smoketest-sub"
+
+$NsBodyFile = New-TemporaryFile
+$SbQueueBodyFile = New-TemporaryFile
+$TopicBodyFile = New-TemporaryFile
+$SubBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $NsBodyFile
+'{"properties": {}}' | Set-Content -NoNewline -Path $SbQueueBodyFile
+'{"properties": {}}' | Set-Content -NoNewline -Path $TopicBodyFile
+'{"properties": {}}' | Set-Content -NoNewline -Path $SubBodyFile
+
+Write-Host "-- PUT Service Bus namespace (async, 202) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace`?api-version=$ApiServiceBus" --body "@$NsBodyFile"
+
+Write-Host "-- GET Service Bus namespace --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace`?api-version=$ApiServiceBus"
+
+Write-Host "-- PUT Service Bus queue --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace/queues/$QueueSb`?api-version=$ApiServiceBus" --body "@$SbQueueBodyFile"
+
+Write-Host "-- SEND mensaje a la cola (data plane) --"
+Invoke-RestMethod -Method Post -Uri "$Endpoint/$Namespace.servicebus/$QueueSb/messages" -ContentType "application/json" -Body '{"body": "hola desde Service Bus"}' | ConvertTo-Json -Compress
+
+Write-Host "-- RECEIVE mensaje (peek-lock) --"
+$sbMsg = Invoke-RestMethod -Method Get -Uri "$Endpoint/$Namespace.servicebus/$QueueSb/messages?peeklock=true"
+$sbMsg | ConvertTo-Json -Depth 10
+$sbMessageId = $sbMsg.value[0].messageId
+$sbLockToken = $sbMsg.value[0].lockToken
+
+Write-Host "-- COMPLETE mensaje (requiere lockToken de la última recepción) --"
+Invoke-RestMethod -Method Delete -Uri "$Endpoint/$Namespace.servicebus/$QueueSb/messages/$sbMessageId`?lockToken=$sbLockToken"
+
+Write-Host "-- DELETE Service Bus queue --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace/queues/$QueueSb`?api-version=$ApiServiceBus"
+
+Write-Host "-- PUT Service Bus topic --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace/topics/$Topic`?api-version=$ApiServiceBus" --body "@$TopicBodyFile"
+
+Write-Host "-- PUT Service Bus subscription --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace/topics/$Topic/subscriptions/$Subscription`?api-version=$ApiServiceBus" --body "@$SubBodyFile"
+
+Write-Host "-- SEND mensaje al topic (fan-out a sus subscriptions) --"
+Invoke-RestMethod -Method Post -Uri "$Endpoint/$Namespace.servicebus/$Topic/messages" -ContentType "application/json" -Body '{"body": "hola desde el topic"}' | ConvertTo-Json -Compress
+
+Write-Host "-- RECEIVE mensaje desde la subscription --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Namespace.servicebus/$Topic/subscriptions/$Subscription/messages?peeklock=true" | ConvertTo-Json -Depth 10
+
+Write-Host "-- DELETE Service Bus subscription --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace/topics/$Topic/subscriptions/$Subscription`?api-version=$ApiServiceBus"
+
+Write-Host "-- DELETE Service Bus topic --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace/topics/$Topic`?api-version=$ApiServiceBus"
+
+Write-Host "-- DELETE Service Bus namespace --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ServiceBus/namespaces/$Namespace`?api-version=$ApiServiceBus"
+
+Remove-Item -Force $NsBodyFile, $SbQueueBodyFile, $TopicBodyFile, $SubBodyFile -ErrorAction SilentlyContinue
+
+$ApiCosmosDb = "2023-04-15"
+$CosmosAccount = "smoketestcosmos"
+$CosmosDb = "smoketestdb"
+$CosmosContainer = "smoketestcontainer"
+
+$CosmosAcctBodyFile = New-TemporaryFile
+$CosmosDbBodyFile = New-TemporaryFile
+$CosmosContainerBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $CosmosAcctBodyFile
+"{`"properties`": {`"resource`": {`"id`": `"$CosmosDb`"}}}" | Set-Content -NoNewline -Path $CosmosDbBodyFile
+"{`"properties`": {`"resource`": {`"id`": `"$CosmosContainer`", `"partitionKey`": {`"paths`": [`"/pk`"]}}}}" | Set-Content -NoNewline -Path $CosmosContainerBodyFile
+
+Write-Host "-- PUT cuenta de Cosmos DB (async, 202) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccount`?api-version=$ApiCosmosDb" --body "@$CosmosAcctBodyFile"
+
+Write-Host "-- GET cuenta de Cosmos DB --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccount`?api-version=$ApiCosmosDb"
+
+Write-Host "-- PUT base de datos SQL --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccount/sqlDatabases/$CosmosDb`?api-version=$ApiCosmosDb" --body "@$CosmosDbBodyFile"
+
+Write-Host "-- PUT container (requiere partitionKey) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccount/sqlDatabases/$CosmosDb/containers/$CosmosContainer`?api-version=$ApiCosmosDb" --body "@$CosmosContainerBodyFile"
+
+Write-Host "-- PUT documento (data plane) --"
+Invoke-RestMethod -Method Put -Uri "$Endpoint/$CosmosAccount.documents/dbs/$CosmosDb/colls/$CosmosContainer/docs/smoketest-doc" -ContentType "application/json" -Body '{"pk": "x", "value": 42}' | ConvertTo-Json -Compress
+
+Write-Host "-- GET documento --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$CosmosAccount.documents/dbs/$CosmosDb/colls/$CosmosContainer/docs/smoketest-doc" | ConvertTo-Json -Compress
+
+Write-Host "-- LIST documentos del container --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$CosmosAccount.documents/dbs/$CosmosDb/colls/$CosmosContainer/docs" | ConvertTo-Json -Depth 10
+
+Write-Host "-- DELETE documento --"
+Invoke-RestMethod -Method Delete -Uri "$Endpoint/$CosmosAccount.documents/dbs/$CosmosDb/colls/$CosmosContainer/docs/smoketest-doc"
+
+Write-Host "-- DELETE container --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccount/sqlDatabases/$CosmosDb/containers/$CosmosContainer`?api-version=$ApiCosmosDb"
+
+Write-Host "-- DELETE base de datos SQL --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccount/sqlDatabases/$CosmosDb`?api-version=$ApiCosmosDb"
+
+Write-Host "-- DELETE cuenta de Cosmos DB --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccount`?api-version=$ApiCosmosDb"
+
+Remove-Item -Force $CosmosAcctBodyFile, $CosmosDbBodyFile, $CosmosContainerBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

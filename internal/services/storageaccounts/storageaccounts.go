@@ -63,8 +63,8 @@ type StorageAccount struct {
 // de las herramientas (az, Terraform, SDKs) leen después de crear la
 // cuenta para saber a dónde apuntar el data plane.
 type StorageAccountProperties struct {
-	ProvisioningState string                    `json:"provisioningState"`
-	PrimaryEndpoints  StorageAccountEndpoints   `json:"primaryEndpoints"`
+	ProvisioningState string                  `json:"provisioningState"`
+	PrimaryEndpoints  StorageAccountEndpoints `json:"primaryEndpoints"`
 }
 
 // StorageAccountEndpoints apunta de vuelta al propio emulador: como no hay
@@ -251,3 +251,4 @@ func (s *Service) deleteStorageAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 }
+    
