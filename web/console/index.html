@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Azure Emulator Console</title>
+<link rel="stylesheet" href="/console/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">☁️ Azure Emulator <span class="badge">local</span></div>
+    <div class="context">
+      Subscription:
+      <input id="subInput" value="00000000-0000-0000-0000-000000000000" />
+      Resource group:
+      <input id="rgInput" value="demo-rg" />
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <button class="nav-item active" data-view="rg">Resource Groups</button>
+      <button class="nav-item" data-view="storage">Storage Accounts</button>
+      <button class="nav-item" data-view="vm">Virtual Machines</button>
+      <button class="nav-item" data-view="kv">Key Vault</button>
+      <button class="nav-item" data-view="sb">Service Bus</button>
+      <button class="nav-item" data-view="cosmos">Cosmos DB</button>
+    </nav>
+
+    <main class="content">
+
+      <section id="view-rg" class="view active">
+        <h1>Resource Manager — Resource Groups</h1>
+        <div class="toolbar">
+          <input id="newRgName" placeholder="nombre del resource group" />
+          <input id="newRgLocation" placeholder="location (ej. eastus)" value="eastus" />
+          <button onclick="createResourceGroup()">Crear</button>
+          <button onclick="loadResourceGroups()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="rgTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-storage" class="view">
+        <h1>Storage — Cuentas</h1>
+        <p class="hint">Listadas dentro del resource group seleccionado arriba.</p>
+        <div class="toolbar">
+          <input id="newStorageName" placeholder="nombre de la cuenta (solo minúsculas/dígitos)" />
+          <input id="newStorageLocation" placeholder="location" value="eastus" />
+          <button onclick="createStorageAccount()">Crear cuenta</button>
+          <button onclick="loadStorageAccounts()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Kind</th><th>Estado</th><th>Blob endpoint</th><th></th></tr></thead>
+          <tbody id="storageTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-vm" class="view">
+        <h1>Compute — Virtual Machines</h1>
+        <p class="hint">Listadas dentro del resource group seleccionado arriba. La creación de VMs requiere NIC y disco existentes — usa <code>az</code>/Terraform para crearlas; esta vista es de solo lectura más start/stop/delete.</p>
+        <div class="toolbar">
+          <button onclick="loadVMs()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Tamaño</th><th>Estado</th><th>Power state</th><th></th></tr></thead>
+          <tbody id="vmTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-kv" class="view">
+        <h1>Key Vault — Vaults</h1>
+        <p class="hint">Listados dentro del resource group seleccionado arriba.</p>
+        <div class="toolbar">
+          <input id="newVaultName" placeholder="nombre del vault" />
+          <input id="newVaultLocation" placeholder="location" value="eastus" />
+          <input id="newVaultTenant" placeholder="tenant id" value="00000000-0000-0000-0000-000000000000" />
+          <button onclick="createVault()">Crear vault</button>
+          <button onclick="loadVaults()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Vault URI</th><th></th></tr></thead>
+          <tbody id="kvTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-sb" class="view">
+        <h1>Service Bus — Namespaces</h1>
+        <p class="hint">Listados dentro del resource group seleccionado arriba. Colas/tópicos se administran con <code>az</code>/Terraform por ahora.</p>
+        <div class="toolbar">
+          <input id="newSbName" placeholder="nombre del namespace" />
+          <input id="newSbLocation" placeholder="location" value="eastus" />
+          <button onclick="createNamespace()">Crear namespace</button>
+          <button onclick="loadNamespaces()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Endpoint</th><th></th></tr></thead>
+          <tbody id="sbTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-cosmos" class="view">
+        <h1>Cosmos DB — Accounts (SQL API)</h1>
+        <p class="hint">Listadas dentro del resource group seleccionado arriba. Databases/containers se administran con <code>az</code>/Terraform por ahora.</p>
+        <div class="toolbar">
+          <input id="newCosmosName" placeholder="nombre de la cuenta" />
+          <input id="newCosmosLocation" placeholder="location" value="eastus" />
+          <button onclick="createCosmosAccount()">Crear cuenta</button>
+          <button onclick="loadCosmosAccounts()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Document endpoint</th><th></th></tr></thead>
+          <tbody id="cosmosTable"></tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="/console/app.js"></script>
+</body>
+</html>

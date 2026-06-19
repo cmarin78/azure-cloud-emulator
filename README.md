@@ -35,8 +35,12 @@ implemented. Phase 6 (Service Bus + Cosmos DB) is done: Service Bus
 namespaces (ARM, async), queues and topics/subscriptions (ARM, sync)
 plus message send/peek-lock-receive/complete (data-plane); Cosmos DB
 SQL API accounts (ARM, async), databases and containers (ARM, sync)
-plus document CRUD (data-plane). See [ROADMAP.md](ROADMAP.md) for the
-next phases.
+plus document CRUD (data-plane). Phase 7 (Web console) is done: a
+minimal vanilla-JS console (`web/console`, no build step) is served by
+the binary itself for browsing resource groups, storage accounts,
+virtual machines, Key Vault vaults, Service Bus namespaces, and Cosmos
+DB accounts — see "Web console" below. See [ROADMAP.md](ROADMAP.md)
+for the next phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -62,7 +66,9 @@ Planned scope (subject to change as work progresses):
   containers (ARM CRUD, sync, partition key required), ✅ document CRUD
   (data-plane: put/create/get/list/delete, simplified vs real Azure —
   plain JSON body instead of partition-key headers).
-- Web console for browsing emulated resources.
+- ✅ Web console for browsing emulated resources (read/list plus create/
+  delete for resource groups, storage accounts, vaults, Service Bus
+  namespaces, Cosmos DB accounts; VMs are list/start/stop/delete only).
 
 ## Project structure
 
@@ -80,6 +86,7 @@ internal/services/compute/      Microsoft.Compute/disks, VM image catalog, and v
 internal/services/keyvault/     Microsoft.KeyVault/vaults (ARM CRUD) + secrets/keys/certificates (path-style {vault}.vault/ data-plane)
 internal/services/servicebus/   Microsoft.ServiceBus/namespaces, queues, topics/subscriptions (ARM CRUD) + messaging (path-style {namespace}.servicebus/ data-plane)
 internal/services/cosmosdb/     Microsoft.DocumentDB/databaseAccounts, sqlDatabases, containers (ARM CRUD) + documents (path-style {account}.documents/ data-plane)
+web/console/                     minimal vanilla-JS web console (no build step), served by the binary itself
 docs/                            banner and other documentation assets
 scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator
 terraform/smoke-test/            minimal Terraform config exercising the emulator's REST endpoints
@@ -93,26 +100,4 @@ terraform/smoke-test/            minimal Terraform config exercising the emulato
   emulator once it has endpoints implemented)
 
 > Note: this repo does not bundle the Go toolchain. If you don't have it
-> installed, get it from https://go.dev/dl/ (or `winget install GoLang.Go`
-> on Windows, `brew install go` on macOS, `apt install golang-go` on
-> Linux).
-
-## Running
-
-```bash
-cd azure-emulator
-go mod tidy
-go run ./cmd/azure-emulator
-```
-
-By default it listens on `:10000` and persists to
-`.azure-emulator-data/azure-emulator.db`. `GET /healthz` confirms the
-process is up. Both can be overridden with `-addr`/`-db` flags or the
-`AZURE_EMULATOR_ADDR`/`AZURE_EMULATOR_DB` environment variables (the
-latter is what the Docker image uses).
-
-## Running with Docker
-
-```bash
-docker compose up --build
-```
+> installed, get it from https://go.dev/
