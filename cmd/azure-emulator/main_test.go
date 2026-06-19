@@ -19,6 +19,7 @@ import (
 
 	"github.com/cesarmarin/azure-emulator/internal/server"
 	"github.com/cesarmarin/azure-emulator/internal/services/aadtoken"
+	"github.com/cesarmarin/azure-emulator/internal/services/appservice"
 	"github.com/cesarmarin/azure-emulator/internal/services/armmeta"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
@@ -61,6 +62,7 @@ func TestAllServicesRegisterWithoutPanic(t *testing.T) {
 	cosmosSvc := cosmosdb.New(db, ops)
 	cosmosSvc.Register(mux)
 	monitor.New(db).Register(mux)
+	appservice.New(db).Register(mux)
 	registerDataPlane(mux, db, keyVaultSvc, serviceBusSvc, cosmosSvc)
 
 	armmeta.New().Register(mux, "http://localhost:10000")

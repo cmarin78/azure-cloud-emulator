@@ -527,6 +527,67 @@ echo "-- DELETE Log Analytics workspace --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/${WORKSPACE}?api-version=${API_MONITOR}"
 
+API_APPSERVICE="2022-03-01"
+PLAN="smoketestplan"
+SITE="smoketestsite"
+
+echo "-- PUT App Service Plan (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${PLAN}?api-version=${API_APPSERVICE}" \
+  --body "{\"location\": \"${LOCATION}\", \"kind\": \"linux\", \"sku\": {\"name\": \"B1\", \"tier\": \"Basic\"}}"
+
+echo "-- GET App Service Plan --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${PLAN}?api-version=${API_APPSERVICE}"
+
+echo "-- LIST App Service Plans --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms?api-version=${API_APPSERVICE}"
+
+PLAN_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${PLAN}"
+
+echo "-- PUT Web App (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}?api-version=${API_APPSERVICE}" \
+  --body "{\"location\": \"${LOCATION}\", \"kind\": \"app,linux\", \"properties\": {\"serverFarmId\": \"${PLAN_ID}\", \"siteConfig\": {\"linuxFxVersion\": \"DOCKER|nginx:latest\"}}}"
+
+echo "-- GET Web App --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}?api-version=${API_APPSERVICE}"
+
+echo "-- LIST Web Apps --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites?api-version=${API_APPSERVICE}"
+
+echo "-- PUT app settings (StringDictionary, reemplazo completo) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}/config/appsettings?api-version=${API_APPSERVICE}" \
+  --body "{\"properties\": {\"WEBSITES_PORT\": \"8080\"}}"
+
+echo "-- GET app settings --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}/config/appsettings?api-version=${API_APPSERVICE}"
+
+echo "-- POST stop Web App (sync, 200) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}/stop?api-version=${API_APPSERVICE}"
+
+echo "-- POST start Web App (sync, 200) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}/start?api-version=${API_APPSERVICE}"
+
+echo "-- POST restart Web App (sync, 200) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}/restart?api-version=${API_APPSERVICE}"
+
+echo "-- DELETE Web App --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}?api-version=${API_APPSERVICE}"
+
+echo "-- DELETE App Service Plan --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${PLAN}?api-version=${API_APPSERVICE}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

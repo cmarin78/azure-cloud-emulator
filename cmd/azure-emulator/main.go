@@ -12,6 +12,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/devtls"
 	"github.com/cesarmarin/azure-emulator/internal/server"
 	"github.com/cesarmarin/azure-emulator/internal/services/aadtoken"
+	"github.com/cesarmarin/azure-emulator/internal/services/appservice"
 	"github.com/cesarmarin/azure-emulator/internal/services/armmeta"
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
@@ -86,6 +87,7 @@ func main() {
 	cosmosSvc := cosmosdb.New(db, ops)
 	cosmosSvc.Register(srv.Mux())
 	monitor.New(db).Register(srv.Mux())
+	appservice.New(db).Register(srv.Mux())
 	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc)
 
 	// Descubrimiento de metadata ARM + emisor de tokens AAD falso: permiten

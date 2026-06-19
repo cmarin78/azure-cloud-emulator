@@ -59,6 +59,9 @@ pull request — see "Running tests" below. Phase 10 (Monitor + Log
 Analytics) is done: Log Analytics workspaces (ARM CRUD, sync, plus a
 `sharedKeys` action and a data-plane Log Analytics Query stub), action
 groups (ARM CRUD, sync), and metric alerts (ARM CRUD, sync) are
+implemented. Phase 11 (App Service) is done: App Service Plans (ARM
+CRUD, sync) and Web Apps (ARM CRUD, sync, plus start/stop/restart
+actions and a `config/appsettings` StringDictionary sub-resource) are
 implemented. See [ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
@@ -98,6 +101,9 @@ Planned scope (subject to change as work progresses):
   stub (always returns an empty result table), ✅ action groups (ARM
   CRUD, sync), ✅ metric alerts (ARM CRUD, sync, referencing an action
   group by id).
+- **App Service**: ✅ App Service Plans (ARM CRUD, sync), ✅ Web Apps
+  (ARM CRUD, sync; start/stop/restart actions; `config/appsettings`
+  StringDictionary sub-resource with full-replace semantics).
 
 ## Project structure
 
@@ -116,6 +122,7 @@ internal/services/keyvault/     Microsoft.KeyVault/vaults (ARM CRUD) + secrets/k
 internal/services/servicebus/   Microsoft.ServiceBus/namespaces, queues, topics/subscriptions (ARM CRUD) + messaging (path-style {namespace}.servicebus/ data-plane)
 internal/services/cosmosdb/     Microsoft.DocumentDB/databaseAccounts, sqlDatabases, containers (ARM CRUD) + documents (path-style {account}.documents/ data-plane)
 internal/services/monitor/      Microsoft.OperationalInsights/workspaces + Microsoft.Insights/actionGroups, metricAlerts (ARM CRUD) + Log Analytics Query stub (POST /v1/workspaces/{id}/query)
+internal/services/appservice/   Microsoft.Web/serverfarms (App Service Plans) + sites (Web Apps, ARM CRUD) + start/stop/restart actions + config/appsettings sub-resource
 internal/services/armmeta/      fake ARM metadata document (/metadata/endpoints) so az CLI/azurerm can discover this emulator as a custom cloud
 internal/services/aadtoken/     fake Azure AD token issuer (/login/{tenant}/oauth2/v2.0/token) accepting any client_id/secret
 internal/services/graph/        minimal Microsoft Graph stub (GET /v1.0/servicePrincipals) so azurerm can resolve a service principal's object ID
@@ -276,7 +283,10 @@ delete with fan-out send/receive), Cosmos DB (account create/get/
 delete, SQL database create/delete, container create/delete, document
 put/get/list/delete), and Monitor/Log Analytics (workspace create/get/
 list/delete, `sharedKeys` action, Log Analytics Query stub, action
-group create/get/list/delete, metric alert create/get/list/delete)
+group create/get/list/delete, metric alert create/get/list/delete),
+and App Service (App Service Plan create/get/list/delete, Web App
+create/get/list/delete referencing a plan by id, app settings put/get
+(StringDictionary, full replace), start/stop/restart actions)
 end to end against a running emulator instance.
 
 **Terraform** — `terraform/smoke-test/` uses the generic `http` provider
@@ -293,10 +303,11 @@ This provisions a resource group, storage account (+ blob container/
 blob, queue + message, table + entity), virtual network/subnet/NIC/
 disk/VM, Key Vault (+ secret/key/certificate), Service Bus namespace
 (+ queue + message), Cosmos DB account (+ database/container/
-document), and a Log Analytics workspace + action group + metric
-alert (referencing the action group by id) against the running
-emulator, then reads each one back via `data "http"` blocks and
-exposes the parsed JSON as outputs.
+document), a Log Analytics workspace + action group + metric
+alert (referencing the action group by id), and an App Service Plan +
+Web App (referencing the plan by id) + app settings against the
+running emulator, then reads each one back via `data "http"` blocks
+and exposes the parsed JSON as outputs.
 
 **Terraform with the real `azurerm` provider** — `terraform/azurerm-smoke-test/`
 points the actual `hashicorp/azurerm` provider at the emulator (not the

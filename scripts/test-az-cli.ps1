@@ -473,6 +473,60 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $WorkspaceBodyFile, $ActionGroupBodyFile, $MetricAlertBodyFile -ErrorAction SilentlyContinue
 
+$ApiAppService = "2022-03-01"
+$Plan = "smoketestplan"
+$Site = "smoketestsite"
+
+$PlanBodyFile = New-TemporaryFile
+$SiteBodyFile = New-TemporaryFile
+$AppSettingsBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`", `"kind`": `"linux`", `"sku`": {`"name`": `"B1`", `"tier`": `"Basic`"}}" | Set-Content -NoNewline -Path $PlanBodyFile
+
+$PlanId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/serverfarms/$Plan"
+"{`"location`": `"$Location`", `"kind`": `"app,linux`", `"properties`": {`"serverFarmId`": `"$PlanId`", `"siteConfig`": {`"linuxFxVersion`": `"DOCKER|nginx:latest`"}}}" | Set-Content -NoNewline -Path $SiteBodyFile
+'{"properties": {"WEBSITES_PORT": "8080"}}' | Set-Content -NoNewline -Path $AppSettingsBodyFile
+
+Write-Host "-- PUT App Service Plan (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/serverfarms/$Plan`?api-version=$ApiAppService" --body "@$PlanBodyFile"
+
+Write-Host "-- GET App Service Plan --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/serverfarms/$Plan`?api-version=$ApiAppService"
+
+Write-Host "-- LIST App Service Plans --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/serverfarms`?api-version=$ApiAppService"
+
+Write-Host "-- PUT Web App (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$Site`?api-version=$ApiAppService" --body "@$SiteBodyFile"
+
+Write-Host "-- GET Web App --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$Site`?api-version=$ApiAppService"
+
+Write-Host "-- LIST Web Apps --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites`?api-version=$ApiAppService"
+
+Write-Host "-- PUT app settings (StringDictionary, reemplazo completo) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$Site/config/appsettings`?api-version=$ApiAppService" --body "@$AppSettingsBodyFile"
+
+Write-Host "-- GET app settings --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$Site/config/appsettings`?api-version=$ApiAppService"
+
+Write-Host "-- POST stop Web App (sync, 200) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$Site/stop`?api-version=$ApiAppService"
+
+Write-Host "-- POST start Web App (sync, 200) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$Site/start`?api-version=$ApiAppService"
+
+Write-Host "-- POST restart Web App (sync, 200) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$Site/restart`?api-version=$ApiAppService"
+
+Write-Host "-- DELETE Web App --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$Site`?api-version=$ApiAppService"
+
+Write-Host "-- DELETE App Service Plan --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/serverfarms/$Plan`?api-version=$ApiAppService"
+
+Remove-Item -Force $PlanBodyFile, $SiteBodyFile, $AppSettingsBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

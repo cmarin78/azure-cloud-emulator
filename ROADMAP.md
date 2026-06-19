@@ -49,8 +49,12 @@ pull request. Phase 10 (Monitor + Log Analytics) is done: Log
 Analytics workspaces (ARM CRUD, sync, plus a `sharedKeys` action and a
 data-plane Log Analytics Query stub that always returns an empty
 result table), action groups (ARM CRUD, sync), and metric alerts (ARM
-CRUD, sync, referencing an action group by id) are implemented. See
-the table below for the per-phase breakdown.
+CRUD, sync, referencing an action group by id) are implemented. Phase
+11 (App Service) is done: App Service Plans (ARM CRUD, sync) and Web
+Apps (ARM CRUD, sync, plus start/stop/restart actions and a
+`config/appsettings` StringDictionary sub-resource with full-replace
+semantics) are implemented. See the table below for the per-phase
+breakdown.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -298,6 +302,43 @@ missing, matching resource groups' convention). Confirmed via
 `destroy` cycle (`terraform/smoke-test/main.tf`, via the `http`
 provider).
 
-Future phases (App Service, AKS, Functions, ARM custom roles/RBAC)
-will be added as unplanned phases once the above is solid, the same
-way gcp-emulator grew past its original 8 phases.
+## Phase 11 — App Service ✅ completed
+
+Standalone, no dependency on Compute/Storage beyond a resource group
+(Web Apps reference a plan by `serverFarmId` but the emulator never
+validates that the referenced plan actually exists, same
+no-referential-integrity approach as Monitor's action-group reference).
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| App Service Plans (ARM CRUD, sync) | resource groups | `azurerm_service_plan`; required by every Web App | S | done |
+| Web Apps (ARM CRUD, sync; start/stop/restart actions) | App Service Plans | `azurerm_linux_web_app`/`azurerm_windows_web_app` | S | done |
+| `config/appsettings` sub-resource (StringDictionary, full replace) | Web Apps | `azurerm_linux_web_app`'s `app_settings` block writes this sub-resource directly | S | done |
+
+Both resources are fully synchronous (no LRO), matching real Azure for
+this resource family. Plan defaults: `sku.capacity = 1` if omitted;
+`reserved` is derived from `kind` (`true` for any `kind` containing
+`linux`). Site defaults: `state = "Running"`, `enabled = true` on
+create; `defaultHostName` is a deterministic
+`{name}.azurewebsites.net` (same fake-but-stable derivation pattern as
+Monitor's per-workspace `customerId`). `start`/`stop`/`restart` mutate
+only `properties.state`, mirroring the action-route pattern already
+used by `compute/vms.go` and Monitor's `sharedKeys`. `config/
+appsettings` auto-vivifies to an empty dictionary on GET before any
+PUT, and each PUT fully replaces the dictionary rather than merging
+(matching `azurerm_linux_web_app`'s `app_settings` apply behavior —
+confirmed via `appservice_test.go`, where an initial test failure
+turned out to be a test-harness artifact from reusing a populated
+`map[string]string` across two decodes, not an actual service bug;
+the storage layer (`storage.DB.Put`) and the production handler
+(`putAppSettings`) were both confirmed to do a true full replace).
+Plan/site deletes are idempotent (204 if missing, matching resource
+groups' convention); deleting a site also cascades to its app
+settings bucket entry. Confirmed via `appservice_test.go` (`httptest`),
+the `az rest` smoke tests (`scripts/test-az-cli.sh`/`.ps1`), and a real
+`terraform apply`/`destroy` cycle (`terraform/smoke-test/main.tf`, via
+the `http` provider).
+
+Future phases (AKS, Functions, ARM custom roles/RBAC) will be added as
+unplanned phases once the above is solid, the same way gcp-emulator
+grew past its original 8 phases.

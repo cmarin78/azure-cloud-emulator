@@ -134,6 +134,10 @@ var registeredNamespaces = []Provider{
 		{ResourceType: "actionGroups", Locations: []string{"global"}},
 		{ResourceType: "metricAlerts", Locations: []string{"global"}},
 	}},
+	{Namespace: "Microsoft.Web", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "serverfarms", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "sites", Locations: []string{"eastus", "westus2"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

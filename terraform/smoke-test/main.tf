@@ -122,15 +122,26 @@ variable "metric_alert" {
   default = "tfsmokemetricalert"
 }
 
+variable "app_service_plan" {
+  type    = string
+  default = "tfsmokeplan"
+}
+
+variable "app_service_site" {
+  type    = string
+  default = "tfsmokesite"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
 # nos dé esta cadena automáticamente como atributo — así que se construye
 # igual que en scripts/test-az-cli.sh/.ps1 (SUBNET_ID/NIC_ID).
 locals {
-  subnet_id       = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}/subnets/${var.subnet}"
-  nic_id          = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkInterfaces/${var.nic}"
-  action_group_id = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/actionGroups/${var.action_group}"
+  subnet_id           = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}/subnets/${var.subnet}"
+  nic_id              = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkInterfaces/${var.nic}"
+  action_group_id     = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/actionGroups/${var.action_group}"
+  app_service_plan_id = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.app_service_plan}"
 }
 
 # PUT resource group (data source con `http` no soporta PUT, así que usamos
@@ -497,6 +508,46 @@ resource "null_resource" "metric_alert" {
   }
 }
 
+# Fase 11 (App Service): plan (ARM, síncrono) + web app (ARM, síncrono,
+# referencia el plan por id, igual que metric_alert referencia el action
+# group) + app settings (StringDictionary, sub-recurso síncrono), mismo
+# patrón null_resource + local-exec del resto del archivo.
+resource "null_resource" "app_service_plan" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    plan = var.app_service_plan
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.app_service_plan}?api-version=2022-03-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"kind\": \"linux\", \"sku\": {\"name\": \"B1\", \"tier\": \"Basic\"}}'"
+  }
+}
+
+resource "null_resource" "app_service_site" {
+  depends_on = [null_resource.app_service_plan]
+  triggers = {
+    site = var.app_service_site
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.app_service_site}?api-version=2022-03-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"kind\": \"app,linux\", \"properties\": {\"serverFarmId\": \"${local.app_service_plan_id}\", \"siteConfig\": {\"linuxFxVersion\": \"DOCKER|nginx:latest\"}}}'"
+  }
+}
+
+resource "null_resource" "app_service_settings" {
+  depends_on = [null_resource.app_service_site]
+  triggers = {
+    settings = "tf-smoke-appsettings"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.app_service_site}/config/appsettings?api-version=2022-03-01' -ContentType 'application/json' -Body '{\"properties\": {\"WEBSITES_PORT\": \"8080\"}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -641,6 +692,21 @@ data "http" "metric_alert" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Insights/metricAlerts/${var.metric_alert}?api-version=2021-08-01"
 }
 
+data "http" "app_service_plan" {
+  depends_on = [null_resource.app_service_plan]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.app_service_plan}?api-version=2022-03-01"
+}
+
+data "http" "app_service_site" {
+  depends_on = [null_resource.app_service_site]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.app_service_site}?api-version=2022-03-01"
+}
+
+data "http" "app_service_settings" {
+  depends_on = [null_resource.app_service_settings]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.app_service_site}/config/appsettings?api-version=2022-03-01"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -739,4 +805,16 @@ output "action_group_response" {
 
 output "metric_alert_response" {
   value = jsondecode(data.http.metric_alert.response_body)
+}
+
+output "app_service_plan_response" {
+  value = jsondecode(data.http.app_service_plan.response_body)
+}
+
+output "app_service_site_response" {
+  value = jsondecode(data.http.app_service_site.response_body)
+}
+
+output "app_service_settings_response" {
+  value = jsondecode(data.http.app_service_settings.response_body)
 }
