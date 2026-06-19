@@ -25,7 +25,10 @@ matching `Azure-AsyncOperation`/`Location` polling, embedded BoltDB
 persistence, a `/healthz` endpoint, fake subscriptions, and resource
 group CRUD (create/update, get, list, async delete). Phase 3 (Storage)
 is done: storage account ARM CRUD, blob containers/blobs, queue
-storage, and table storage (all data-plane) are implemented. See
+storage, and table storage (all data-plane) are implemented. Phase 4
+(Compute) is done: virtual networks/subnets, network interfaces,
+managed disks, a static VM image catalog, and virtual machines
+(create/get/delete, start/stop, all async) are implemented. See
 [ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
@@ -38,7 +41,9 @@ Planned scope (subject to change as work progresses):
   delete tables, insert/get/query/replace/merge/delete entities with a
   simplified `$filter` subset).
 - **Key Vault**: secrets, keys, certificates.
-- **Compute**: virtual machines, virtual networks, disks, images.
+- **Compute**: ✅ virtual networks/subnets, ✅ network interfaces, ✅ managed
+  disks, ✅ static VM image catalog, ✅ virtual machines (create/get/
+  delete, start/stop — all async, matching real Azure's LRO pattern).
 - **Resource Manager**: ✅ resource groups, fake subscriptions, ARM-style
   long-running operations.
 - **Service Bus**: queues and topics/subscriptions (basic send/receive).
@@ -56,6 +61,8 @@ internal/services/storageaccounts/  Microsoft.Storage/storageAccounts ARM CRUD (
 internal/services/blob/         Blob containers/blobs data-plane (path-style {account}.blob/ endpoint)
 internal/services/queue/        Queue storage data-plane (path-style {account}.queue/ endpoint)
 internal/services/table/        Table storage data-plane (path-style {account}.table/ endpoint)
+internal/services/network/      Microsoft.Network/virtualNetworks, subnets, and networkInterfaces (ARM CRUD)
+internal/services/compute/      Microsoft.Compute/disks, VM image catalog, and virtualMachines (ARM CRUD)
 docs/                            banner and other documentation assets
 scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator
 terraform/smoke-test/            minimal Terraform config exercising the emulator's REST endpoints
@@ -125,9 +132,13 @@ az login                       # once, any account/tenant works
 This exercises subscription auto-vivification, resource group CRUD,
 storage account CRUD, blob container/blob CRUD (create container,
 upload/list/download/delete blob, delete container), queue storage
-(create queue, put/peek/get(dequeue)/delete message, delete queue), and
+(create queue, put/peek/get(dequeue)/delete message, delete queue),
 table storage (create table, insert/get/query/merge/delete entity,
-delete table) end to end against a running emulator instance.
+delete table), and Compute/Network (virtual network + subnet CRUD,
+network interface CRUD, managed disk CRUD, VM image catalog lookup,
+virtual machine create/get/start/powerOff/delete — confirming the VM
+response never echoes back `adminPassword`) end to end against a
+running emulator instance.
 
 **Terraform** — pointing the real `azurerm` provider at the emulator
 won't work yet (same metadata/AAD discovery problem). `terraform/smoke-test/`

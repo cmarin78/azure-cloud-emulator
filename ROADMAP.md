@@ -23,7 +23,10 @@ basics (fake subscriptions, resource group CRUD with async delete,
 generic LRO polling) are live, and the project ships as a Docker
 image. Phase 3 (Storage) is done: storage account ARM CRUD, blob
 containers/blobs, queue storage, and table storage (all data-plane)
-are implemented — see the table below.
+are implemented. Phase 4 (Compute) is done: virtual networks/subnets,
+network interfaces, managed disks, a static VM image catalog, and
+virtual machines (create/get/delete, start/stop) are implemented — see
+the table below.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -77,7 +80,7 @@ of Compute/Key Vault — can be done in parallel with Phase 4/5.
 | Queue storage (CRUD, enqueue/dequeue) | storage accounts | `azurerm_storage_queue` | S | done |
 | Table storage (CRUD, basic entity operations) | storage accounts | `azurerm_storage_table` | S | done |
 
-## Phase 4 — Compute
+## Phase 4 — Compute ✅ completed
 
 Depends on Resource Manager (Phase 2) for resource groups, and benefits
 from the LRO helper (Phase 1) since every Compute mutation in real Azure
@@ -85,16 +88,26 @@ is asynchronous.
 
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| Virtual networks + subnets | resource groups | `azurerm_virtual_network`/`azurerm_subnet`; required by NICs | S | — |
-| Network interfaces (NICs) | virtual networks | `azurerm_network_interface`; required by VMs | S | — |
-| Managed disks | resource groups | `azurerm_managed_disk`; required by VM OS disk | S | — |
-| VM images (static catalog, e.g. Ubuntu 22.04, Windows Server 2022) | — | Required by VM image reference | S | — |
-| Virtual machines (create/list/get/delete, start/stop) | NICs, disks, images | `azurerm_linux_virtual_machine`/`azurerm_windows_virtual_machine` | L | — |
+| Virtual networks + subnets | resource groups | `azurerm_virtual_network`/`azurerm_subnet`; required by NICs | S | done |
+| Network interfaces (NICs) | virtual networks | `azurerm_network_interface`; required by VMs | S | done |
+| Managed disks | resource groups | `azurerm_managed_disk`; required by VM OS disk | S | done |
+| VM images (static catalog, e.g. Ubuntu 22.04, Windows Server 2022) | — | Required by VM image reference | S | done |
+| Virtual machines (create/get/delete, start/stop) | NICs, disks, images | `azurerm_linux_virtual_machine`/`azurerm_windows_virtual_machine` | L | done |
 
-Target: `terraform apply`/`destroy` against `azurerm_virtual_network` +
-`azurerm_network_interface` + `azurerm_linux_virtual_machine` works
-without provider patches, matching the bar gcp-emulator hit for
-`google_compute_instance`.
+Each resource is covered by an `az rest` smoke test
+(`scripts/test-az-cli.sh`/`.ps1`) and a Terraform smoke test
+(`terraform/smoke-test/`, via the `http` provider — see the note above
+on why `azurerm` itself can't point at the emulator yet). Confirmed:
+VNet/subnet/NIC/disk CRUD, image catalog resolution (including
+`version: "latest"`), VM create (202 + body)/get (no `adminPassword`
+leaked)/start/powerOff (202, no body)/delete (202), and resource group
+cascade cleanup via `az rest`.
+
+Target (still open): `terraform apply`/`destroy` against the real
+`azurerm_virtual_network` + `azurerm_network_interface` +
+`azurerm_linux_virtual_machine` resources, without provider patches —
+blocked on the fake ARM metadata/AAD work tracked below, same as the
+`azurerm_storage_account` equivalent in Phase 3.
 
 ## Phase 5 — Key Vault
 

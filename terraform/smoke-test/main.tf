@@ -41,6 +41,46 @@ variable "storage_account" {
   default = "tfsmokestorage"
 }
 
+variable "location" {
+  type    = string
+  default = "eastus"
+}
+
+variable "vnet" {
+  type    = string
+  default = "tf-smoke-vnet"
+}
+
+variable "subnet" {
+  type    = string
+  default = "default"
+}
+
+variable "nic" {
+  type    = string
+  default = "tf-smoke-nic"
+}
+
+variable "disk" {
+  type    = string
+  default = "tf-smoke-disk"
+}
+
+variable "vm" {
+  type    = string
+  default = "tf-smoke-vm"
+}
+
+# IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
+# shape estándar de ARM: como el emulador no tiene un provider azurerm real
+# (ver comentario al inicio del archivo), no hay un recurso de Terraform que
+# nos dé esta cadena automáticamente como atributo — así que se construye
+# igual que en scripts/test-az-cli.sh/.ps1 (SUBNET_ID/NIC_ID).
+locals {
+  subnet_id = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}/subnets/${var.subnet}"
+  nic_id    = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkInterfaces/${var.nic}"
+}
+
 # PUT resource group (data source con `http` no soporta PUT, así que usamos
 # un null_resource + local-exec para la escritura, y `http` solo para los
 # GET de verificación).
@@ -159,6 +199,69 @@ resource "null_resource" "table_entity" {
   }
 }
 
+# Fase 4 (Compute/Network): mismo patrón null_resource + local-exec que el
+# resto del archivo, ya que tampoco existe un provider azurerm real para
+# estos recursos (ver comentario al inicio del archivo).
+resource "null_resource" "vnet" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    vnet = var.vnet
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"properties\": {\"addressSpace\": {\"addressPrefixes\": [\"10.0.0.0/16\"]}}}'"
+  }
+}
+
+resource "null_resource" "subnet" {
+  depends_on = [null_resource.vnet]
+  triggers = {
+    subnet = var.subnet
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}/subnets/${var.subnet}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"properties\": {\"addressPrefix\": \"10.0.1.0/24\"}}'"
+  }
+}
+
+resource "null_resource" "nic" {
+  depends_on = [null_resource.subnet]
+  triggers = {
+    nic = var.nic
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkInterfaces/${var.nic}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"properties\": {\"ipConfigurations\": [{\"name\": \"ipconfig1\", \"properties\": {\"subnet\": {\"id\": \"${local.subnet_id}\"}}}]}}'"
+  }
+}
+
+resource "null_resource" "disk" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    disk = var.disk
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Compute/disks/${var.disk}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"sku\": {\"name\": \"Standard_LRS\"}, \"properties\": {\"diskSizeGB\": 32, \"creationData\": {\"createOption\": \"Empty\"}}}'"
+  }
+}
+
+resource "null_resource" "vm" {
+  depends_on = [null_resource.nic]
+  triggers = {
+    vm = var.vm
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Compute/virtualMachines/${var.vm}?api-version=2023-09-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"properties\": {\"hardwareProfile\": {\"vmSize\": \"Standard_B1s\"}, \"storageProfile\": {\"imageReference\": {\"publisher\": \"Canonical\", \"offer\": \"0001-com-ubuntu-server-jammy\", \"sku\": \"22_04-lts-gen2\", \"version\": \"latest\"}}, \"osProfile\": {\"computerName\": \"tfsmokevm\", \"adminUsername\": \"azureuser\", \"adminPassword\": \"P@ssw0rd1234!\"}, \"networkProfile\": {\"networkInterfaces\": [{\"id\": \"${local.nic_id}\"}]}}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -208,6 +311,35 @@ data "http" "table_entity" {
   url        = "${var.endpoint}/${var.storage_account}.table/tfsmoketable(PartitionKey='tf',RowKey='1')"
 }
 
+# Fase 4 (Compute/Network): verificación de lectura, mismo patrón.
+data "http" "vnet" {
+  depends_on = [null_resource.vnet]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}?api-version=2023-09-01"
+}
+
+data "http" "subnet" {
+  depends_on = [null_resource.subnet]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/virtualNetworks/${var.vnet}/subnets/${var.subnet}?api-version=2023-09-01"
+}
+
+data "http" "nic" {
+  depends_on = [null_resource.nic]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/networkInterfaces/${var.nic}?api-version=2023-09-01"
+}
+
+data "http" "disk" {
+  depends_on = [null_resource.disk]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Compute/disks/${var.disk}?api-version=2023-09-01"
+}
+
+# La respuesta de la VM no debe incluir adminPassword (igual que en los
+# scripts de az CLI): ver internal/services/compute/vms.go, OsProfile no
+# tiene ese campo en el struct de salida.
+data "http" "vm" {
+  depends_on = [null_resource.vm]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Compute/virtualMachines/${var.vm}?api-version=2023-09-01"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -238,4 +370,24 @@ output "table_list_response" {
 
 output "table_entity_response" {
   value = jsondecode(data.http.table_entity.response_body)
+}
+
+output "vnet_response" {
+  value = jsondecode(data.http.vnet.response_body)
+}
+
+output "subnet_response" {
+  value = jsondecode(data.http.subnet.response_body)
+}
+
+output "nic_response" {
+  value = jsondecode(data.http.nic.response_body)
+}
+
+output "disk_response" {
+  value = jsondecode(data.http.disk.response_body)
+}
+
+output "vm_response" {
+  value = jsondecode(data.http.vm.response_body)
 }

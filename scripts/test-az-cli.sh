@@ -115,8 +115,8 @@ echo "-- GET message (dequeue: reserva con popReceipt + visibilitytimeout) --"
 GET_RESPONSE=$(az rest --method get \
   --url "${ENDPOINT}/${ACCOUNT}.queue/${QUEUE}/messages?numofmessages=1&visibilitytimeout=30")
 echo "${GET_RESPONSE}"
-MESSAGE_ID=$(echo "${GET_RESPONSE}" | grep -oP '"messageId"\s*:\s*"\K[^"]+' | head -1)
-POP_RECEIPT=$(echo "${GET_RESPONSE}" | grep -oP '"popReceipt"\s*:\s*"\K[^"]+' | head -1)
+MESSAGE_ID=$(echo "${GET_RESPONSE}" | sed -n 's/.*"messageId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+POP_RECEIPT=$(echo "${GET_RESPONSE}" | sed -n 's/.*"popReceipt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 echo "-- DELETE message (requiere el popReceipt de la última lectura) --"
 az rest --method delete \
@@ -171,6 +171,97 @@ az rest --method delete \
 echo "-- DELETE storage account --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${ACCOUNT}?api-version=${API_STORAGE}"
+
+API_NETWORK="2023-09-01"
+API_COMPUTE="2023-09-01"
+API_COMPUTE_IMAGES="2023-04-02"
+VNET="smoketest-vnet"
+SUBNET="default"
+NIC="smoketest-nic"
+DISK="smoketest-disk"
+VM="smoketest-vm"
+LOCATION="eastus"
+
+echo "-- PUT virtual network --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}?api-version=${API_NETWORK}" \
+  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"addressSpace\": {\"addressPrefixes\": [\"10.0.0.0/16\"]}}}"
+
+echo "-- GET virtual network --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}?api-version=${API_NETWORK}"
+
+echo "-- PUT subnet --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}?api-version=${API_NETWORK}" \
+  --body "{\"properties\": {\"addressPrefix\": \"10.0.1.0/24\"}}"
+
+echo "-- GET subnet --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}?api-version=${API_NETWORK}"
+
+SUBNET_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}"
+
+echo "-- PUT network interface (asigna IP privada automáticamente) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}?api-version=${API_NETWORK}" \
+  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"ipConfigurations\": [{\"name\": \"ipconfig1\", \"properties\": {\"subnet\": {\"id\": \"${SUBNET_ID}\"}}}]}}"
+
+echo "-- GET network interface --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}?api-version=${API_NETWORK}"
+
+NIC_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}"
+
+echo "-- PUT managed disk --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/disks/${DISK}?api-version=${API_COMPUTE}" \
+  --body "{\"location\": \"${LOCATION}\", \"sku\": {\"name\": \"Standard_LRS\"}, \"properties\": {\"diskSizeGB\": 32, \"creationData\": {\"createOption\": \"Empty\"}}}"
+
+echo "-- GET managed disk --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/disks/${DISK}?api-version=${API_COMPUTE}"
+
+echo "-- LIST imágenes del catálogo estático (Canonical Ubuntu 22.04) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Compute/locations/${LOCATION}/publishers/Canonical/artifacttypes/vmimage/offers/0001-com-ubuntu-server-jammy/skus/22_04-lts-gen2/versions?api-version=${API_COMPUTE_IMAGES}"
+
+echo "-- PUT virtual machine (async, 202 con cuerpo) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}?api-version=${API_COMPUTE}" \
+  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"hardwareProfile\": {\"vmSize\": \"Standard_B1s\"}, \"storageProfile\": {\"imageReference\": {\"publisher\": \"Canonical\", \"offer\": \"0001-com-ubuntu-server-jammy\", \"sku\": \"22_04-lts-gen2\", \"version\": \"latest\"}}, \"osProfile\": {\"computerName\": \"smoketestvm\", \"adminUsername\": \"azureuser\", \"adminPassword\": \"P@ssw0rd1234!\"}, \"networkProfile\": {\"networkInterfaces\": [{\"id\": \"${NIC_ID}\"}]}}}"
+
+echo "-- GET virtual machine (la respuesta no debe incluir adminPassword) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}?api-version=${API_COMPUTE}"
+
+echo "-- POST powerOff virtual machine (async, 202 sin cuerpo) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}/powerOff?api-version=${API_COMPUTE}"
+
+echo "-- POST start virtual machine (async, 202 sin cuerpo) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}/start?api-version=${API_COMPUTE}"
+
+echo "-- DELETE virtual machine (async, 202) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}?api-version=${API_COMPUTE}"
+
+echo "-- DELETE managed disk --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/disks/${DISK}?api-version=${API_COMPUTE}"
+
+echo "-- DELETE network interface --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}?api-version=${API_NETWORK}"
+
+echo "-- DELETE subnet --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}?api-version=${API_NETWORK}"
+
+echo "-- DELETE virtual network --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}?api-version=${API_NETWORK}"
 
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \

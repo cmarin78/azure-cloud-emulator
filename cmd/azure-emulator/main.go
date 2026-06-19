@@ -10,6 +10,8 @@ import (
 
 	"github.com/cesarmarin/azure-emulator/internal/server"
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
+	"github.com/cesarmarin/azure-emulator/internal/services/compute"
+	"github.com/cesarmarin/azure-emulator/internal/services/network"
 	"github.com/cesarmarin/azure-emulator/internal/services/queue"
 	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
 	"github.com/cesarmarin/azure-emulator/internal/services/storageaccounts"
@@ -45,11 +47,15 @@ func main() {
 
 	resourcemanager.New(db, ops).Register(srv.Mux())
 	storageaccounts.New(db, ops).Register(srv.Mux())
+	networkSvc := network.New(db)
+	networkSvc.Register(srv.Mux())
+	compute.New(db, ops, networkSvc).Register(srv.Mux())
 	registerDataPlane(srv.Mux(), db)
 
 	// TODO: register more ARM control-plane service packages here as
-	// they're implemented (Compute, Key Vault, ...), following the
-	// internal/services/<name>.New(db, [ops]).Register(mux) pattern.
+	// they're implemented (Key Vault, Service Bus, Cosmos DB, ...),
+	// following the internal/services/<name>.New(db, [ops]).Register(mux)
+	// pattern.
 
 	log.Printf("azure-emulator listening on %s (data: %s)", *addr, *dbPath)
 	if err := http.ListenAndServe(*addr, srv.Handler()); err != nil {
