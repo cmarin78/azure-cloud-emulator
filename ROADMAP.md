@@ -25,8 +25,10 @@ image. Phase 3 (Storage) is done: storage account ARM CRUD, blob
 containers/blobs, queue storage, and table storage (all data-plane)
 are implemented. Phase 4 (Compute) is done: virtual networks/subnets,
 network interfaces, managed disks, a static VM image catalog, and
-virtual machines (create/get/delete, start/stop) are implemented — see
-the table below.
+virtual machines (create/get/delete, start/stop) are implemented.
+Phase 5 (Key Vault) is done: vault ARM CRUD plus secrets/keys/
+certificates (data-plane, simulated cryptographic material) are
+implemented — see the table below.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -109,16 +111,26 @@ Target (still open): `terraform apply`/`destroy` against the real
 blocked on the fake ARM metadata/AAD work tracked below, same as the
 `azurerm_storage_account` equivalent in Phase 3.
 
-## Phase 5 — Key Vault
+## Phase 5 — Key Vault ✅ completed
 
 Standalone, no dependency on Compute/Storage beyond a resource group.
 
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| Vaults (ARM-level CRUD) | resource groups | `azurerm_key_vault` | S | — |
-| Secrets (CRUD) | vaults | `azurerm_key_vault_secret`; most common use case | S | — |
-| Keys (CRUD, basic ops) | vaults | `azurerm_key_vault_key` | M | — |
-| Certificates (CRUD, basic ops) | vaults | `azurerm_key_vault_certificate` | M | — |
+| Vaults (ARM-level CRUD) | resource groups | `azurerm_key_vault` | S | done |
+| Secrets (CRUD) | vaults | `azurerm_key_vault_secret`; most common use case | S | done |
+| Keys (CRUD, basic ops) | vaults | `azurerm_key_vault_key` | M | done |
+| Certificates (CRUD, basic ops) | vaults | `azurerm_key_vault_certificate` | M | done |
+
+Keys and certificates don't implement real cryptographic operations
+(sign/encrypt/wrapKey/X.509) — they generate random bytes via
+`crypto/rand` to populate JWK fields (`n`/`e`) or certificate fields
+(`cer`/`x5t` thumbprint), which is enough for `az`/Terraform to
+create/read/list/delete them end to end. Secrets follow the same
+list-never-echoes-the-value convention as the real API. Vault deletes
+are idempotent (204 if missing, matching resource groups' convention);
+secret/key/certificate deletes return 404 if missing (matching queue
+storage's data-plane convention).
 
 ## Phase 6 — Messaging and data
 

@@ -28,8 +28,10 @@ is done: storage account ARM CRUD, blob containers/blobs, queue
 storage, and table storage (all data-plane) are implemented. Phase 4
 (Compute) is done: virtual networks/subnets, network interfaces,
 managed disks, a static VM image catalog, and virtual machines
-(create/get/delete, start/stop, all async) are implemented. See
-[ROADMAP.md](ROADMAP.md) for the next phases.
+(create/get/delete, start/stop, all async) are implemented. Phase 5
+(Key Vault) is done: vault ARM CRUD plus secrets/keys/certificates
+(all data-plane, with simulated cryptographic material) are
+implemented. See [ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -40,7 +42,9 @@ Planned scope (subject to change as work progresses):
   timeout + pop receipts), ✅ table storage (data-plane: create/list/
   delete tables, insert/get/query/replace/merge/delete entities with a
   simplified `$filter` subset).
-- **Key Vault**: secrets, keys, certificates.
+- **Key Vault**: ✅ vaults (ARM CRUD), ✅ secrets (data-plane CRUD), ✅ keys
+  (data-plane CRUD, simulated JWK material), ✅ certificates (data-plane
+  CRUD, simulated cert material — no real X.509/crypto operations).
 - **Compute**: ✅ virtual networks/subnets, ✅ network interfaces, ✅ managed
   disks, ✅ static VM image catalog, ✅ virtual machines (create/get/
   delete, start/stop — all async, matching real Azure's LRO pattern).
@@ -63,6 +67,7 @@ internal/services/queue/        Queue storage data-plane (path-style {account}.q
 internal/services/table/        Table storage data-plane (path-style {account}.table/ endpoint)
 internal/services/network/      Microsoft.Network/virtualNetworks, subnets, and networkInterfaces (ARM CRUD)
 internal/services/compute/      Microsoft.Compute/disks, VM image catalog, and virtualMachines (ARM CRUD)
+internal/services/keyvault/     Microsoft.KeyVault/vaults (ARM CRUD) + secrets/keys/certificates (path-style {vault}.vault/ data-plane)
 docs/                            banner and other documentation assets
 scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator
 terraform/smoke-test/            minimal Terraform config exercising the emulator's REST endpoints
@@ -137,8 +142,10 @@ table storage (create table, insert/get/query/merge/delete entity,
 delete table), and Compute/Network (virtual network + subnet CRUD,
 network interface CRUD, managed disk CRUD, VM image catalog lookup,
 virtual machine create/get/start/powerOff/delete — confirming the VM
-response never echoes back `adminPassword`) end to end against a
-running emulator instance.
+response never echoes back `adminPassword`), and Key Vault (vault
+create/get/list/delete, secret put/get/list (list never echoes back
+`value`)/delete, key put/get/list/delete, certificate put/get/list/
+delete) end to end against a running emulator instance.
 
 **Terraform** — pointing the real `azurerm` provider at the emulator
 won't work yet (same metadata/AAD discovery problem). `terraform/smoke-test/`

@@ -263,6 +263,78 @@ echo "-- DELETE virtual network --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}?api-version=${API_NETWORK}"
 
+API_KEYVAULT="2023-07-01"
+VAULT="smoketestkv"
+TENANT_ID="00000000-0000-0000-0000-000000000000"
+
+echo "-- PUT key vault (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${VAULT}?api-version=${API_KEYVAULT}" \
+  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"sku\": {\"family\": \"A\", \"name\": \"standard\"}, \"tenantId\": \"${TENANT_ID}\"}}"
+
+echo "-- GET key vault --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${VAULT}?api-version=${API_KEYVAULT}"
+
+echo "-- LIST key vaults --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults?api-version=${API_KEYVAULT}"
+
+echo "-- PUT secret (data plane) --"
+az rest --method put \
+  --url "${ENDPOINT}/${VAULT}.vault/secrets/smoketest-secret" \
+  --body "{\"value\": \"super-secreto\"}"
+
+echo "-- GET secret --"
+az rest --method get \
+  --url "${ENDPOINT}/${VAULT}.vault/secrets/smoketest-secret"
+
+echo "-- LIST secrets (sin 'value') --"
+az rest --method get \
+  --url "${ENDPOINT}/${VAULT}.vault/secrets"
+
+echo "-- DELETE secret --"
+az rest --method delete \
+  --url "${ENDPOINT}/${VAULT}.vault/secrets/smoketest-secret"
+
+echo "-- PUT key (data plane, material simulado) --"
+az rest --method put \
+  --url "${ENDPOINT}/${VAULT}.vault/keys/smoketest-key" \
+  --body "{\"kty\": \"RSA\"}"
+
+echo "-- GET key --"
+az rest --method get \
+  --url "${ENDPOINT}/${VAULT}.vault/keys/smoketest-key"
+
+echo "-- LIST keys --"
+az rest --method get \
+  --url "${ENDPOINT}/${VAULT}.vault/keys"
+
+echo "-- DELETE key --"
+az rest --method delete \
+  --url "${ENDPOINT}/${VAULT}.vault/keys/smoketest-key"
+
+echo "-- PUT certificate (data plane, material simulado) --"
+az rest --method put \
+  --url "${ENDPOINT}/${VAULT}.vault/certificates/smoketest-cert" \
+  --body "{\"policy\": {}}"
+
+echo "-- GET certificate --"
+az rest --method get \
+  --url "${ENDPOINT}/${VAULT}.vault/certificates/smoketest-cert"
+
+echo "-- LIST certificates --"
+az rest --method get \
+  --url "${ENDPOINT}/${VAULT}.vault/certificates"
+
+echo "-- DELETE certificate --"
+az rest --method delete \
+  --url "${ENDPOINT}/${VAULT}.vault/certificates/smoketest-cert"
+
+echo "-- DELETE key vault --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${VAULT}?api-version=${API_KEYVAULT}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

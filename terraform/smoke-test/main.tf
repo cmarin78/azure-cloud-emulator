@@ -71,6 +71,16 @@ variable "vm" {
   default = "tf-smoke-vm"
 }
 
+variable "vault" {
+  type    = string
+  default = "tfsmokekv"
+}
+
+variable "tenant_id" {
+  type    = string
+  default = "00000000-0000-0000-0000-000000000000"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -262,6 +272,57 @@ resource "null_resource" "vm" {
   }
 }
 
+# Fase 5 (Key Vault): vault (ARM, síncrono) + secret/key/certificate
+# (data plane bajo {vault}.vault/...), mismo patrón null_resource +
+# local-exec del resto del archivo.
+resource "null_resource" "vault" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    vault = var.vault
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.KeyVault/vaults/${var.vault}?api-version=2023-07-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"properties\": {\"sku\": {\"family\": \"A\", \"name\": \"standard\"}, \"tenantId\": \"${var.tenant_id}\"}}'"
+  }
+}
+
+resource "null_resource" "secret" {
+  depends_on = [null_resource.vault]
+  triggers = {
+    secret = "tf-smoke-secret"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/${var.vault}.vault/secrets/tf-smoke-secret' -ContentType 'application/json' -Body '{\"value\": \"super-secreto-terraform\"}'"
+  }
+}
+
+resource "null_resource" "key" {
+  depends_on = [null_resource.vault]
+  triggers = {
+    key = "tf-smoke-key"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/${var.vault}.vault/keys/tf-smoke-key' -ContentType 'application/json' -Body '{\"kty\": \"RSA\"}'"
+  }
+}
+
+resource "null_resource" "certificate" {
+  depends_on = [null_resource.vault]
+  triggers = {
+    certificate = "tf-smoke-cert"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/${var.vault}.vault/certificates/tf-smoke-cert' -ContentType 'application/json' -Body '{\"policy\": {}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -340,6 +401,29 @@ data "http" "vm" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Compute/virtualMachines/${var.vm}?api-version=2023-09-01"
 }
 
+data "http" "vault" {
+  depends_on = [null_resource.vault]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.KeyVault/vaults/${var.vault}?api-version=2023-07-01"
+}
+
+# El listado de secrets nunca incluye "value" (igual que la API real), así
+# que esta data source es segura para releer en cualquier momento sin
+# preocuparse por exponer el secreto en el state de Terraform.
+data "http" "secret_list" {
+  depends_on = [null_resource.secret]
+  url        = "${var.endpoint}/${var.vault}.vault/secrets"
+}
+
+data "http" "key" {
+  depends_on = [null_resource.key]
+  url        = "${var.endpoint}/${var.vault}.vault/keys/tf-smoke-key"
+}
+
+data "http" "certificate" {
+  depends_on = [null_resource.certificate]
+  url        = "${var.endpoint}/${var.vault}.vault/certificates/tf-smoke-cert"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -390,4 +474,20 @@ output "disk_response" {
 
 output "vm_response" {
   value = jsondecode(data.http.vm.response_body)
+}
+
+output "vault_response" {
+  value = jsondecode(data.http.vault.response_body)
+}
+
+output "secret_list_response" {
+  value = jsondecode(data.http.secret_list.response_body)
+}
+
+output "key_response" {
+  value = jsondecode(data.http.key.response_body)
+}
+
+output "certificate_response" {
+  value = jsondecode(data.http.certificate.response_body)
 }

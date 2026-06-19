@@ -248,6 +248,63 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $VnetBodyFile, $SubnetBodyFile, $NicBodyFile, $DiskBodyFile, $VmBodyFile -ErrorAction SilentlyContinue
 
+$ApiKeyVault = "2023-07-01"
+$Vault = "smoketestkv"
+$TenantId = "00000000-0000-0000-0000-000000000000"
+
+$VaultBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`", `"properties`": {`"sku`": {`"family`": `"A`", `"name`": `"standard`"}, `"tenantId`": `"$TenantId`"}}" | Set-Content -NoNewline -Path $VaultBodyFile
+
+Write-Host "-- PUT key vault (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.KeyVault/vaults/$Vault`?api-version=$ApiKeyVault" --body "@$VaultBodyFile"
+
+Write-Host "-- GET key vault --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.KeyVault/vaults/$Vault`?api-version=$ApiKeyVault"
+
+Write-Host "-- LIST key vaults --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.KeyVault/vaults`?api-version=$ApiKeyVault"
+
+Write-Host "-- PUT secret (data plane) --"
+Invoke-RestMethod -Method Put -Uri "$Endpoint/$Vault.vault/secrets/smoketest-secret" -ContentType "application/json" -Body '{"value": "super-secreto"}'
+
+Write-Host "-- GET secret --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Vault.vault/secrets/smoketest-secret" | ConvertTo-Json -Depth 10
+
+Write-Host "-- LIST secrets (sin 'value') --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Vault.vault/secrets" | ConvertTo-Json -Depth 10
+
+Write-Host "-- DELETE secret --"
+Invoke-RestMethod -Method Delete -Uri "$Endpoint/$Vault.vault/secrets/smoketest-secret"
+
+Write-Host "-- PUT key (data plane, material simulado) --"
+Invoke-RestMethod -Method Put -Uri "$Endpoint/$Vault.vault/keys/smoketest-key" -ContentType "application/json" -Body '{"kty": "RSA"}'
+
+Write-Host "-- GET key --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Vault.vault/keys/smoketest-key" | ConvertTo-Json -Depth 10
+
+Write-Host "-- LIST keys --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Vault.vault/keys" | ConvertTo-Json -Depth 10
+
+Write-Host "-- DELETE key --"
+Invoke-RestMethod -Method Delete -Uri "$Endpoint/$Vault.vault/keys/smoketest-key"
+
+Write-Host "-- PUT certificate (data plane, material simulado) --"
+Invoke-RestMethod -Method Put -Uri "$Endpoint/$Vault.vault/certificates/smoketest-cert" -ContentType "application/json" -Body '{"policy": {}}'
+
+Write-Host "-- GET certificate --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Vault.vault/certificates/smoketest-cert" | ConvertTo-Json -Depth 10
+
+Write-Host "-- LIST certificates --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$Vault.vault/certificates" | ConvertTo-Json -Depth 10
+
+Write-Host "-- DELETE certificate --"
+Invoke-RestMethod -Method Delete -Uri "$Endpoint/$Vault.vault/certificates/smoketest-cert"
+
+Write-Host "-- DELETE key vault --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.KeyVault/vaults/$Vault`?api-version=$ApiKeyVault"
+
+Remove-Item -Force $VaultBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

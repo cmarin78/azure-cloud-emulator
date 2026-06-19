@@ -11,6 +11,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/server"
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
+	"github.com/cesarmarin/azure-emulator/internal/services/keyvault"
 	"github.com/cesarmarin/azure-emulator/internal/services/network"
 	"github.com/cesarmarin/azure-emulator/internal/services/queue"
 	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
@@ -50,12 +51,13 @@ func main() {
 	networkSvc := network.New(db)
 	networkSvc.Register(srv.Mux())
 	compute.New(db, ops, networkSvc).Register(srv.Mux())
-	registerDataPlane(srv.Mux(), db)
+	keyVaultSvc := keyvault.New(db)
+	keyVaultSvc.Register(srv.Mux())
+	registerDataPlane(srv.Mux(), db, keyVaultSvc)
 
 	// TODO: register more ARM control-plane service packages here as
-	// they're implemented (Key Vault, Service Bus, Cosmos DB, ...),
-	// following the internal/services/<name>.New(db, [ops]).Register(mux)
-	// pattern.
+	// they're implemented (Service Bus, Cosmos DB, ...), following the
+	// internal/services/<name>.New(db, [ops]).Register(mux) pattern.
 
 	log.Printf("azure-emulator listening on %s (data: %s)", *addr, *dbPath)
 	if err := http.ListenAndServe(*addr, srv.Handler()); err != nil {
@@ -73,7 +75,7 @@ func main() {
 // ("conflicts with pattern"). Por eso este es el único lugar que llama
 // mux.HandleFunc para estos servicios: lee el primer segmento del path
 // una vez y despacha por sufijo al ServeHTTP del servicio que corresponda.
-func registerDataPlane(mux *http.ServeMux, db *storage.DB) {
+func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault.Service) {
 	blobSvc := blob.New(db)
 	queueSvc := queue.New(db)
 	tableSvc := table.New(db)
@@ -87,9 +89,11 @@ func registerDataPlane(mux *http.ServeMux, db *storage.DB) {
 			queueSvc.ServeHTTP(w, r)
 		case strings.HasSuffix(accountResource, ".table"):
 			tableSvc.ServeHTTP(w, r)
+		case strings.HasSuffix(accountResource, ".vault"):
+			keyVaultSvc.ServeHTTP(w, r)
 		default:
 			server.WriteError(w, http.StatusNotFound, "ResourceNotFound",
-				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...', '{account}.queue/...' o '{account}.table/...'")
+				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...', '{account}.queue/...', '{account}.table/...' o '{vault}.vault/...'")
 		}
 	})
 }
