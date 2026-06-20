@@ -77,7 +77,13 @@ Service site) plus `syncfunctiontriggers` and `host/default/listkeys`
 actions are implemented — a Function App itself is just a
 `Microsoft.Web/sites` resource with `kind="functionapp[,linux]"`,
 already fully supported by Phase 11's App Service implementation with
-no changes. See [ROADMAP.md](ROADMAP.md) for the next phases.
+no changes. Phase 15 (Entra ID & RBAC) is done: app registrations and
+service principals (extending the Phase 8 Microsoft Graph stub) plus
+custom role definitions and role assignments
+(`Microsoft.Authorization`, ARM CRUD, sync, with scope-isolated
+subscription/resource-group storage so a subscription-scope list never
+leaks a resource-group-scope assignment) are implemented. See
+[ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -136,6 +142,14 @@ Planned scope (subject to change as work progresses):
   `masterKey`/`functionKeys`) — the Function App itself needs no new
   code, it's a `Microsoft.Web/sites` resource already supported by
   Phase 11's App Service implementation.
+- **Entra ID & RBAC**: ✅ app registrations (`v1.0/applications`,
+  extends the Phase 8 Microsoft Graph stub), ✅ service principals
+  (explicit `POST` plus `$filter=appId eq '...'` auto-discovery), ✅
+  custom role definitions (`Microsoft.Authorization/roleDefinitions`,
+  ARM CRUD, sync), ✅ role assignments
+  (`Microsoft.Authorization/roleAssignments`, ARM CRUD, sync,
+  scope-isolated subscription/resource-group storage) — no real
+  directory or authorization evaluation behind it.
 
 ## Project structure
 
@@ -159,7 +173,8 @@ internal/services/aks/          Microsoft.ContainerService/managedClusters (ARM 
 internal/services/functions/    Microsoft.Web/sites/functions sub-resource (ARM CRUD, sync) + syncfunctiontriggers/host/default/listkeys actions (Function App site itself is handled by appservice)
 internal/services/armmeta/      fake ARM metadata document (/metadata/endpoints) so az CLI/azurerm can discover this emulator as a custom cloud
 internal/services/aadtoken/     fake Azure AD token issuer (/login/{tenant}/oauth2/v2.0/token) accepting any client_id/secret
-internal/services/graph/        minimal Microsoft Graph stub (GET /v1.0/servicePrincipals) so azurerm can resolve a service principal's object ID
+internal/services/graph/        Microsoft Graph stub: applications + servicePrincipals (POST/GET/$filter auto-discovery) so azurerm can resolve a service principal's object ID
+internal/services/authorization/  Microsoft.Authorization/roleDefinitions + roleAssignments (ARM CRUD, sync, scope-isolated subscription/resource-group storage)
 internal/devtls/                self-signed TLS certificate generation/caching for the optional -tls flag
 web/console/                     minimal vanilla-JS web console (no build step), served by the binary itself
 docs/                            banner and other documentation assets
@@ -337,8 +352,14 @@ and Functions (App Service Plan Y1/Dynamic create, Function App
 create (`kind=functionapp,linux`, reusing the existing `appservice`
 implementation), function definition put/get/list, `syncfunctiontriggers`
 (204, no body), `host/default/listkeys` (non-empty `masterKey`), and
-cleanup deletes of the function/app/plan) end to end against a running
-emulator instance.
+cleanup deletes of the function/app/plan), and Entra ID & RBAC
+(application create/get, service principal create plus `$filter`
+auto-discovery, role definition put/get/list, role assignment put/get
+at both subscription and resource-group scope — confirming a
+subscription-scope list never includes a resource-group-scope
+assignment — and cleanup deletes of the role assignments, role
+definition, service principal, and application) end to end against a
+running emulator instance.
 
 **Terraform** — `terraform/smoke-test/` uses the generic `http` provider
 plus `local-exec` to verify every REST endpoint responds with the
@@ -361,9 +382,13 @@ Web App (referencing the plan by id) + app settings, and Networking
 IP by id plus inline frontend/backend/rule, Route Table + route, and
 a Private DNS zone + A record), an AKS managed cluster + agent pool,
 and a Functions App Service Plan + Function App + function definition
-(plus a `syncfunctiontriggers` call), against the running emulator,
-then reads each one back via `data "http"` blocks and exposes the
-parsed JSON as outputs.
+(plus a `syncfunctiontriggers` call), and Entra ID & RBAC (an
+application, a service principal, a custom role definition, and role
+assignments at both subscription and resource-group scope), against
+the running emulator, then reads each one back via `data "http"`
+blocks and exposes the parsed JSON as outputs — including a
+`role_assignments_sub_list` data source confirming the
+subscription-scope list excludes the resource-group-scope assignment.
 
 **Terraform with the real `azurerm` provider** — `terraform/azurerm-smoke-test/`
 points the actual `hashicorp/azurerm` provider at the emulator (not the

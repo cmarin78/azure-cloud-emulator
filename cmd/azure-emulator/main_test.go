@@ -21,6 +21,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/aadtoken"
 	"github.com/cesarmarin/azure-emulator/internal/services/appservice"
 	"github.com/cesarmarin/azure-emulator/internal/services/armmeta"
+	"github.com/cesarmarin/azure-emulator/internal/services/authorization"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
 	"github.com/cesarmarin/azure-emulator/internal/services/graph"
@@ -63,11 +64,12 @@ func TestAllServicesRegisterWithoutPanic(t *testing.T) {
 	cosmosSvc.Register(mux)
 	monitor.New(db).Register(mux)
 	appservice.New(db).Register(mux)
+	authorization.New(db).Register(mux)
 	registerDataPlane(mux, db, keyVaultSvc, serviceBusSvc, cosmosSvc)
 
 	armmeta.New().Register(mux, "http://localhost:10000")
 	aadtoken.New().Register(mux)
-	graph.New().Register(mux)
+	graph.New(db).Register(mux)
 
 	// Sanity check trivial: el mux debería estar lo bastante armado como
 	// para devolver *alguna* respuesta (aunque sea un 404) en vez de un

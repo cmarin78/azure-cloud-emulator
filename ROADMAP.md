@@ -62,8 +62,15 @@ alongside the existing VNet/subnet/NIC resources. Phase 13 (AKS) is
 done: managed clusters (ARM CRUD, async) and agent pools (ARM CRUD,
 async, independently routable sub-resource) are implemented — "shape-
 compatible, not behavior-complete", since there is no real Kubernetes
-control plane behind any of it. See the table below for the per-phase
-breakdown.
+control plane behind any of it. Phase 14 (Functions) is done: Function
+App definitions (a sub-resource of the existing `Microsoft.Web/sites`
+from Phase 11) plus the `syncfunctiontriggers` and `host/default/
+listkeys` action routes are implemented. Phase 15 (Entra ID & RBAC) is
+done: app registrations and service principals (Microsoft Graph stub,
+extending Phase 8) plus custom role definitions and role assignments
+(`Microsoft.Authorization`, with scope-isolated subscription/
+resource-group storage) are implemented. See the table below for the
+per-phase breakdown.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -485,7 +492,7 @@ needs no changes to host a Function App), the `az rest` smoke tests
 `destroy` cycle (`terraform/smoke-test/main.tf`, via the `http`
 provider).
 
-## Phase 15 — Entra ID (Azure AD) & RBAC 🔜 planned
+## Phase 15 — Entra ID (Azure AD) & RBAC ✅ completed
 
 Standalone, but this is the phase most other future phases will lean
 on: managed identities (Phase 16) need a principal to assign roles to,
@@ -497,10 +504,10 @@ scratch where it overlaps.
 
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| App registrations (`Microsoft.Graph` `applications`, data-plane-shaped) | `graph` package (Phase 8) | `azuread_application`; the directory-side representation behind every service principal | S | planned |
-| Service principals (extend the existing `servicePrincipals` stub to support create, not just list) | App registrations | `azuread_service_principal`; currently the Phase 8 stub only supports `GET /v1.0/servicePrincipals` for `azurerm`'s own auth bootstrap | S | planned |
-| Custom role definitions (`Microsoft.Authorization/roleDefinitions`, ARM CRUD, sync) | resource groups (any scope) | `azurerm_role_definition`; defines a named set of `actions`/`notActions`, no real permission evaluation | S | planned |
-| Role assignments (`Microsoft.Authorization/roleAssignments`, ARM CRUD, sync) | role definitions, a principal (service principal or managed identity) | `azurerm_role_assignment`; links a principal to a role at a scope — same no-referential-integrity convention as the rest of the project, so the principal/role don't need to actually exist | S | planned |
+| App registrations (`Microsoft.Graph` `applications`, data-plane-shaped) | `graph` package (Phase 8) | `azuread_application`; the directory-side representation behind every service principal | S | done |
+| Service principals (extend the existing `servicePrincipals` stub to support create, not just list) | App registrations | `azuread_service_principal`; currently the Phase 8 stub only supports `GET /v1.0/servicePrincipals` for `azurerm`'s own auth bootstrap | S | done |
+| Custom role definitions (`Microsoft.Authorization/roleDefinitions`, ARM CRUD, sync) | resource groups (any scope) | `azurerm_role_definition`; defines a named set of `actions`/`notActions`, no real permission evaluation | S | done |
+| Role assignments (`Microsoft.Authorization/roleAssignments`, ARM CRUD, sync) | role definitions, a principal (service principal or managed identity) | `azurerm_role_assignment`; links a principal to a role at a scope — same no-referential-integrity convention as the rest of the project, so the principal/role don't need to actually exist | S | done |
 
 Like Key Vault's simulated cryptographic material, none of this
 performs real authorization — `roleAssignments` just persists the
@@ -508,6 +515,36 @@ link; nothing in the emulator ever checks it before allowing a
 request. This is enough for `azurerm`/`azuread` Terraform configs that
 provision RBAC alongside real resources to apply and destroy cleanly
 against the emulator.
+
+Applications and service principals live in `internal/services/graph`
+(extending the Phase 8 stub), registered as literal `/v1.0/`-prefixed
+routes (`applications[/{id}]`, `servicePrincipals[/{id}]`) so they stay
+more specific than the shared data-plane dispatcher's wildcard, the
+same conflict class previously resolved for `aadtoken`'s `/login/`
+prefix. There is no real directory behind any of it: any request body
+is accepted, `displayName` isn't required to be unique, and object IDs
+are either a random GUID (explicit `POST`) or a deterministic
+sha256-derived value (the pre-existing auto-discovery-by-`appId`
+lookup path that `azurerm`'s own auth bootstrap already relied on since
+Phase 8). Role definitions and role assignments live in a new
+`internal/services/authorization` package, registered under
+`Microsoft.Authorization` (locations `["global"]`); both are fully
+synchronous (no LRO), matching the rest of the no-real-evaluation
+resource families in this emulator. Role assignments use a two-bucket
+storage split — subscription-scope and resource-group-scope
+assignments are kept in separate BoltDB buckets
+(`authorization.roleassignments.subscription`/`.resourcegroup`) — so
+that a subscription-scope `LIST` can never accidentally include a
+resource-group-scope assignment whose subscription ID happens to match
+as a string prefix. Confirmed via `authorization_test.go` (`httptest`,
+including a dedicated `TestRoleAssignmentResourceGroupScope` proving
+the bucket-split isolation), the `az rest` smoke tests
+(`scripts/test-az-cli.sh`/`.ps1` — app registration → service principal
+→ auto-discovery `$filter` lookup → role definition CRUD → role
+assignment create at both scopes → cleanup), and a real `terraform
+apply`/`destroy` cycle (`terraform/smoke-test/main.tf`, via the `http`
+provider, including a `data.http.role_assignments_sub_list` check that
+re-verifies the same scope-isolation behavior from Terraform's side).
 
 ## Phase 16 — Managed Identities 🔜 planned
 

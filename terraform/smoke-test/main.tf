@@ -182,6 +182,21 @@ variable "func_name" {
   default = "HttpTrigger1"
 }
 
+variable "role_definition_id" {
+  type    = string
+  default = "tfsmoke11111111-1111-1111-1111-111111111111"
+}
+
+variable "role_assignment_name" {
+  type    = string
+  default = "tfsmoke22222222-2222-2222-2222-222222222222"
+}
+
+variable "role_assignment_rg_name" {
+  type    = string
+  default = "tfsmoke33333333-3333-3333-3333-333333333333"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -195,6 +210,7 @@ locals {
   public_ip_id        = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/publicIPAddresses/${var.public_ip}"
   load_balancer_id    = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/loadBalancers/${var.load_balancer}"
   func_plan_id        = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.func_plan}"
+  role_definition_id  = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/${var.role_definition_id}"
 }
 
 # PUT resource group (data source con `http` no soporta PUT, así que usamos
@@ -789,6 +805,50 @@ resource "null_resource" "func_sync_triggers" {
   }
 }
 
+# Fase 15 (Entra ID + RBAC): role definition (ARM, síncrono, scope de
+# suscripción) + role assignment a nivel de suscripción y a nivel de
+# resource group (dos buckets separados server-side — ver
+# internal/services/authorization/roleassignments.go — para que el listado
+# a nivel de suscripción nunca incluya una asignación de un resource group
+# cuyo subscriptionId coincide). Mismo patrón null_resource + local-exec del
+# resto del archivo, ya que no existe un provider azurerm/azuread real
+# detrás de este emulador (ver comentario al inicio del archivo).
+resource "null_resource" "role_definition" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    role_definition = var.role_definition_id
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/${var.role_definition_id}?api-version=2022-04-01' -ContentType 'application/json' -Body '{\"properties\": {\"roleName\": \"tf-smoke-custom-role\", \"description\": \"rol de prueba creado por terraform smoke-test\", \"assignableScopes\": [\"/subscriptions/${var.subscription_id}\"], \"permissions\": [{\"actions\": [\"Microsoft.Storage/storageAccounts/read\"]}]}}'"
+  }
+}
+
+resource "null_resource" "role_assignment" {
+  depends_on = [null_resource.role_definition]
+  triggers = {
+    assignment = var.role_assignment_name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleAssignments/${var.role_assignment_name}?api-version=2022-04-01' -ContentType 'application/json' -Body '{\"properties\": {\"roleDefinitionId\": \"${local.role_definition_id}\", \"principalId\": \"tf-smoke-principal\"}}'"
+  }
+}
+
+resource "null_resource" "role_assignment_rg" {
+  depends_on = [null_resource.role_definition]
+  triggers = {
+    assignment = var.role_assignment_rg_name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Authorization/roleAssignments/${var.role_assignment_rg_name}?api-version=2022-04-01' -ContentType 'application/json' -Body '{\"properties\": {\"roleDefinitionId\": \"${local.role_definition_id}\", \"principalId\": \"tf-smoke-principal-rg\"}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -1003,6 +1063,32 @@ data "http" "func_definition" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.func_app}/functions/${var.func_name}?api-version=2022-03-01"
 }
 
+# Fase 15 (Entra ID + RBAC): verificación de lectura, mismo patrón.
+data "http" "role_definition" {
+  depends_on = [null_resource.role_definition]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/${var.role_definition_id}?api-version=2022-04-01"
+}
+
+data "http" "role_assignment" {
+  depends_on = [null_resource.role_assignment]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleAssignments/${var.role_assignment_name}?api-version=2022-04-01"
+}
+
+data "http" "role_assignment_rg" {
+  depends_on = [null_resource.role_assignment_rg]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Authorization/roleAssignments/${var.role_assignment_rg_name}?api-version=2022-04-01"
+}
+
+# La lista a nivel de suscripción no debe incluir la asignación de resource
+# group (ver TestRoleAssignmentResourceGroupScope en
+# internal/services/authorization/authorization_test.go para el mismo check
+# vía Go test) -- esta data source es la verificación equivalente desde el
+# lado de Terraform.
+data "http" "role_assignments_sub_list" {
+  depends_on = [null_resource.role_assignment, null_resource.role_assignment_rg]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -1153,4 +1239,20 @@ output "func_app_response" {
 
 output "func_definition_response" {
   value = jsondecode(data.http.func_definition.response_body)
+}
+
+output "role_definition_response" {
+  value = jsondecode(data.http.role_definition.response_body)
+}
+
+output "role_assignment_response" {
+  value = jsondecode(data.http.role_assignment.response_body)
+}
+
+output "role_assignment_rg_response" {
+  value = jsondecode(data.http.role_assignment_rg.response_body)
+}
+
+output "role_assignments_sub_list_response" {
+  value = jsondecode(data.http.role_assignments_sub_list.response_body)
 }

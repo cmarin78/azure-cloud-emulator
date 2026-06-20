@@ -15,6 +15,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/aks"
 	"github.com/cesarmarin/azure-emulator/internal/services/appservice"
 	"github.com/cesarmarin/azure-emulator/internal/services/armmeta"
+	"github.com/cesarmarin/azure-emulator/internal/services/authorization"
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
@@ -92,6 +93,7 @@ func main() {
 	appservice.New(db).Register(srv.Mux())
 	functions.New(db).Register(srv.Mux())
 	aks.New(db, ops).Register(srv.Mux())
+	authorization.New(db).Register(srv.Mux())
 	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc)
 
 	// Descubrimiento de metadata ARM + emisor de tokens AAD falso: permiten
@@ -100,7 +102,7 @@ func main() {
 	// emulador en vez de depender de `az rest`/el provider `http` genérico.
 	armmeta.New().Register(srv.Mux(), base)
 	aadtoken.New().Register(srv.Mux())
-	graph.New().Register(srv.Mux())
+	graph.New(db).Register(srv.Mux())
 
 	// La consola web se sirve bajo el prefijo "/console/" en vez de "/" a
 	// secas: el dispatcher de data plane registra "/{accountResource}/{path...}",

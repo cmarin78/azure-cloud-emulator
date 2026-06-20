@@ -777,6 +777,92 @@ echo "-- DELETE App Service Plan para Functions --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${FUNC_PLAN}?api-version=${API_APPSERVICE}"
 
+API_AUTHZ="2022-04-01"
+APP_DISPLAY_NAME="smoketest-app"
+ROLE_DEF_ID="55555555-5555-5555-5555-555555555555"
+ROLE_ASSIGN_NAME="66666666-6666-6666-6666-666666666666"
+ROLE_ASSIGN_RG_NAME="77777777-7777-7777-7777-777777777777"
+
+echo "-- POST application (Entra ID) --"
+APP_RESPONSE=$(az rest --method post \
+  --url "${ENDPOINT}/v1.0/applications" \
+  --body "{\"displayName\": \"${APP_DISPLAY_NAME}\"}")
+echo "${APP_RESPONSE}"
+APP_ID=$(echo "${APP_RESPONSE}" | sed -n 's/.*"appId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+APP_OBJECT_ID=$(echo "${APP_RESPONSE}" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+echo "-- GET application --"
+az rest --method get \
+  --url "${ENDPOINT}/v1.0/applications/${APP_OBJECT_ID}"
+
+echo "-- POST service principal explícito (a partir del appId de la app) --"
+SP_RESPONSE=$(az rest --method post \
+  --url "${ENDPOINT}/v1.0/servicePrincipals" \
+  --body "{\"appId\": \"${APP_ID}\", \"displayName\": \"${APP_DISPLAY_NAME}\"}")
+echo "${SP_RESPONSE}"
+SP_OBJECT_ID=$(echo "${SP_RESPONSE}" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+echo "-- GET service principal vía \$filter (ruta de auto-discovery por appId) --"
+az rest --method get \
+  --url "${ENDPOINT}/v1.0/servicePrincipals?\$filter=appId eq '${APP_ID}'"
+
+ROLE_DEF_FULL_ID="/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/${ROLE_DEF_ID}"
+
+echo "-- PUT role definition (subscription scope) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/${ROLE_DEF_ID}?api-version=${API_AUTHZ}" \
+  --body "{\"properties\": {\"roleName\": \"SmokeTest Role\", \"description\": \"role de prueba\", \"assignableScopes\": [\"/subscriptions/${SUB}\"], \"permissions\": [{\"actions\": [\"*\"], \"notActions\": []}]}}"
+
+echo "-- GET role definition --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/${ROLE_DEF_ID}?api-version=${API_AUTHZ}"
+
+echo "-- LIST role definitions --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions?api-version=${API_AUTHZ}"
+
+echo "-- PUT role assignment (subscription scope) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${ROLE_ASSIGN_NAME}?api-version=${API_AUTHZ}" \
+  --body "{\"properties\": {\"roleDefinitionId\": \"${ROLE_DEF_FULL_ID}\", \"principalId\": \"${SP_OBJECT_ID}\"}}"
+
+echo "-- GET role assignment (subscription scope) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${ROLE_ASSIGN_NAME}?api-version=${API_AUTHZ}"
+
+echo "-- PUT role assignment (resource-group scope, mismo principal/role) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Authorization/roleAssignments/${ROLE_ASSIGN_RG_NAME}?api-version=${API_AUTHZ}" \
+  --body "{\"properties\": {\"roleDefinitionId\": \"${ROLE_DEF_FULL_ID}\", \"principalId\": \"${SP_OBJECT_ID}\"}}"
+
+echo "-- LIST role assignments (subscription scope, NO debe incluir la de resource-group) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments?api-version=${API_AUTHZ}"
+
+echo "-- LIST role assignments (resource-group scope) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Authorization/roleAssignments?api-version=${API_AUTHZ}"
+
+echo "-- DELETE role assignment (resource-group scope) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Authorization/roleAssignments/${ROLE_ASSIGN_RG_NAME}?api-version=${API_AUTHZ}"
+
+echo "-- DELETE role assignment (subscription scope) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${ROLE_ASSIGN_NAME}?api-version=${API_AUTHZ}"
+
+echo "-- DELETE role definition --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/${ROLE_DEF_ID}?api-version=${API_AUTHZ}"
+
+echo "-- DELETE service principal --"
+az rest --method delete \
+  --url "${ENDPOINT}/v1.0/servicePrincipals/${SP_OBJECT_ID}"
+
+echo "-- DELETE application --"
+az rest --method delete \
+  --url "${ENDPOINT}/v1.0/applications/${APP_OBJECT_ID}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

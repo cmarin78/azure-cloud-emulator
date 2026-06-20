@@ -699,6 +699,83 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $FuncPlanBodyFile, $FuncAppBodyFile, $FuncDefBodyFile -ErrorAction SilentlyContinue
 
+$ApiAuthz = "2022-04-01"
+$AppDisplayName = "smoketest-app"
+$RoleDefId = "55555555-5555-5555-5555-555555555555"
+$RoleAssignName = "66666666-6666-6666-6666-666666666666"
+$RoleAssignRgName = "77777777-7777-7777-7777-777777777777"
+
+$AppBodyFile = New-TemporaryFile
+$SpBodyFile = New-TemporaryFile
+$RoleDefBodyFile = New-TemporaryFile
+$RoleAssignBodyFile = New-TemporaryFile
+"{`"displayName`": `"$AppDisplayName`"}" | Set-Content -NoNewline -Path $AppBodyFile
+
+Write-Host "-- POST application (Microsoft Graph, sin directorio real detrás) --"
+$app = az rest --method post --url "$Endpoint/v1.0/applications" --body "@$AppBodyFile" | ConvertFrom-Json
+$app | ConvertTo-Json
+$AppId = $app.appId
+$AppObjectId = $app.id
+
+Write-Host "-- GET application --"
+az rest --method get --url "$Endpoint/v1.0/applications/$AppObjectId"
+
+"{`"appId`": `"$AppId`", `"displayName`": `"$AppDisplayName`"}" | Set-Content -NoNewline -Path $SpBodyFile
+
+Write-Host "-- POST service principal explícito (az ad sp create-for-rbac) --"
+$sp = az rest --method post --url "$Endpoint/v1.0/servicePrincipals" --body "@$SpBodyFile" | ConvertFrom-Json
+$sp | ConvertTo-Json
+$SpObjectId = $sp.id
+
+Write-Host "-- GET service principal por filtro de appId (descubrimiento automático que ya usaba azurerm) --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/v1.0/servicePrincipals?`$filter=appId eq '$AppId'" | ConvertTo-Json -Depth 10
+
+$RoleDefFullId = "/subscriptions/$Sub/providers/Microsoft.Authorization/roleDefinitions/$RoleDefId"
+"{`"properties`": {`"roleName`": `"smoketest-custom-role`", `"description`": `"rol de prueba`", `"assignableScopes`": [`"/subscriptions/$Sub`"], `"permissions`": [{`"actions`": [`"Microsoft.Storage/storageAccounts/read`"]}]}}" | Set-Content -NoNewline -Path $RoleDefBodyFile
+
+Write-Host "-- PUT role definition (ARM, sync, scope de suscripción) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/roleDefinitions/$RoleDefId`?api-version=$ApiAuthz" --body "@$RoleDefBodyFile"
+
+Write-Host "-- GET role definition --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/roleDefinitions/$RoleDefId`?api-version=$ApiAuthz"
+
+Write-Host "-- LIST role definitions --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/roleDefinitions`?api-version=$ApiAuthz"
+
+"{`"properties`": {`"roleDefinitionId`": `"$RoleDefFullId`", `"principalId`": `"$SpObjectId`"}}" | Set-Content -NoNewline -Path $RoleAssignBodyFile
+
+Write-Host "-- PUT role assignment (scope de suscripción) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/roleAssignments/$RoleAssignName`?api-version=$ApiAuthz" --body "@$RoleAssignBodyFile"
+
+Write-Host "-- GET role assignment --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/roleAssignments/$RoleAssignName`?api-version=$ApiAuthz"
+
+Write-Host "-- PUT role assignment (scope de resource group, mismo principal) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Authorization/roleAssignments/$RoleAssignRgName`?api-version=$ApiAuthz" --body "@$RoleAssignBodyFile"
+
+Write-Host "-- LIST role assignments a nivel de suscripción (NO debe incluir la de resource group) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/roleAssignments`?api-version=$ApiAuthz"
+
+Write-Host "-- LIST role assignments a nivel de resource group --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Authorization/roleAssignments`?api-version=$ApiAuthz"
+
+Write-Host "-- DELETE role assignment (resource group) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Authorization/roleAssignments/$RoleAssignRgName`?api-version=$ApiAuthz"
+
+Write-Host "-- DELETE role assignment (suscripción) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/roleAssignments/$RoleAssignName`?api-version=$ApiAuthz"
+
+Write-Host "-- DELETE role definition --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/roleDefinitions/$RoleDefId`?api-version=$ApiAuthz"
+
+Write-Host "-- DELETE service principal --"
+az rest --method delete --url "$Endpoint/v1.0/servicePrincipals/$SpObjectId"
+
+Write-Host "-- DELETE application --"
+az rest --method delete --url "$Endpoint/v1.0/applications/$AppObjectId"
+
+Remove-Item -Force $AppBodyFile, $SpBodyFile, $RoleDefBodyFile, $RoleAssignBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 
