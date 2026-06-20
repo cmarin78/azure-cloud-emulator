@@ -685,6 +685,48 @@ echo "-- DELETE network security group --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}?api-version=${API_NETWORK}"
 
+API_AKS="2023-10-01"
+CLUSTER="smoketestaks"
+NODE_POOL="userpool"
+
+echo "-- PUT AKS managed cluster (async, 202 con cuerpo) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}?api-version=${API_AKS}" \
+  --body "{\"location\": \"${LOCATION}\", \"identity\": {\"type\": \"SystemAssigned\"}, \"properties\": {\"dnsPrefix\": \"${CLUSTER}\"}}"
+
+echo "-- GET AKS managed cluster (debe traer el pool 'default' sintetizado) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}?api-version=${API_AKS}"
+
+echo "-- LIST AKS managed clusters --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters?api-version=${API_AKS}"
+
+echo "-- PUT AKS agent pool (sub-recurso, async, 202) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}/agentPools/${NODE_POOL}?api-version=${API_AKS}" \
+  --body "{\"properties\": {\"vmSize\": \"Standard_DS2_v2\", \"count\": 2, \"mode\": \"User\"}}"
+
+echo "-- GET AKS agent pool --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}/agentPools/${NODE_POOL}?api-version=${API_AKS}"
+
+echo "-- LIST AKS agent pools (default + userpool) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}/agentPools?api-version=${API_AKS}"
+
+echo "-- POST listClusterUserCredential (kubeconfig base64) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}/listClusterUserCredential?api-version=${API_AKS}"
+
+echo "-- DELETE AKS agent pool --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}/agentPools/${NODE_POOL}?api-version=${API_AKS}"
+
+echo "-- DELETE AKS managed cluster (cascada sobre agentPools restantes) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}?api-version=${API_AKS}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

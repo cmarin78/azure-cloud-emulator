@@ -58,8 +58,12 @@ Security Groups + security rules, Public IP addresses, Load Balancers
 (referencing a public IP and exposing inline frontend/backend/rule
 collections), Route Tables + routes, and Private DNS zones + record
 sets (A/CNAME) are implemented, all within `internal/services/network`
-alongside the existing VNet/subnet/NIC resources. See the table below
-for the per-phase breakdown.
+alongside the existing VNet/subnet/NIC resources. Phase 13 (AKS) is
+done: managed clusters (ARM CRUD, async) and agent pools (ARM CRUD,
+async, independently routable sub-resource) are implemented — "shape-
+compatible, not behavior-complete", since there is no real Kubernetes
+control plane behind any of it. See the table below for the per-phase
+breakdown.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -386,6 +390,56 @@ resources plus the Subnet→NSG/RouteTable reference behavior), the
 `terraform apply`/`destroy` cycle (`terraform/smoke-test/main.tf`, via
 the `http` provider).
 
-Future phases (AKS, Functions, ARM custom roles/RBAC) will be added as
+## Phase 13 — AKS ✅ completed
+
+Standalone, no dependency on Compute/Networking beyond a resource group
+(in real Azure a cluster references a VNet subnet for its nodes, but
+this emulator never validates that the referenced subnet actually
+exists, same no-referential-integrity approach used throughout —
+Monitor's action-group reference, App Service's `serverFarmId`, etc.).
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| Managed clusters (ARM CRUD, async) | resource groups | `azurerm_kubernetes_cluster`; the cluster itself, plus a synthesized "default" System agent pool from `properties.agentPoolProfiles` on create | M | done |
+| Agent pools (ARM CRUD, async, independently routable sub-resource) | managed clusters | `azurerm_kubernetes_cluster_node_pool`; any node pool beyond the cluster's inline `default_node_pool` | S | done |
+| `listClusterUserCredential`/`listClusterAdminCredential` (sync action, data-plane-shaped) | managed clusters | `az aks get-credentials`/`azurerm`'s `kube_config` attribute both expect a base64 kubeconfig back | S | done |
+
+Both managed clusters and agent pools are asynchronous (LRO), matching
+real Azure's AKS control-plane behavior, unlike most other resource
+families in this emulator which are synchronous. There is no real
+Kubernetes control plane behind any of this — `provisioningState` and
+`powerState` always report `"Succeeded"`/`"Running"`, matching the
+project's "shape-compatible, not behavior-complete" philosophy already
+used for Key Vault's simulated cryptographic material and Monitor's
+unevaluated alert criteria. `fqdn` and the identity's `principalId`/
+`tenantId` are deterministic per-cluster fake values (FNV-32a hash of
+the cluster's resource ID, same derivation pattern as Public IP's fake
+`ipAddress` in Phase 12), so they stay stable across repeated GETs.
+Creating a cluster synthesizes a "default" System-mode agent pool from
+`properties.agentPoolProfiles` and immediately persists it as an
+independently routable `agentPools` sub-resource, so `GET .../
+agentPools/default` succeeds without a separate PUT — mirroring how
+`az aks create --node-count` exposes its default pool via `az aks
+nodepool show` from the start. `agentPoolProfiles` on the parent
+cluster is always read fresh from the agent-pool sub-resource bucket
+on GET, so adding/removing pools via the sub-resource route is
+reflected immediately. `listClusterUserCredential`/
+`listClusterAdminCredential` return a synchronous 200 with a
+base64-encoded fake kubeconfig YAML (server URL derived from the fake
+`fqdn`, a fake bearer token) — no LRO headers, same sync-action-route
+pattern already used by Monitor's `sharedKeys` and App Service's
+start/stop/restart. Agent pool PUT/DELETE require the parent cluster
+to exist first (404 otherwise); deleting a cluster cascades
+synchronously to all of its agent pools before returning the async
+delete response, matching real Azure's "deleting a cluster deletes its
+node pools" behavior. Cluster/agent-pool deletes are idempotent (204
+if missing, matching resource groups' convention). Confirmed via
+`aks_test.go` (`httptest`, covering cluster/pool lifecycle, dnsPrefix
+and agent-pool-mode validation, and missing-parent-cluster 404), the
+`az rest` smoke tests (`scripts/test-az-cli.sh`/`.ps1`), and a real
+`terraform apply`/`destroy` cycle (`terraform/smoke-test/main.tf`, via
+the `http` provider).
+
+Future phases (Functions, ARM custom roles/RBAC) will be added as
 unplanned phases once the above is solid, the same way gcp-emulator
 grew past its original 8 phases.

@@ -615,6 +615,44 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $NsgBodyFile, $RuleBodyFile, $PipBodyFile, $LbBodyFile, $RtBodyFile, $RouteBodyFile, $DnsRecordBodyFile -ErrorAction SilentlyContinue
 
+$ApiAks = "2023-10-01"
+$Cluster = "smoketestaks"
+$NodePool = "userpool"
+
+$ClusterBodyFile = New-TemporaryFile
+$NodePoolBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`", `"identity`": {`"type`": `"SystemAssigned`"}, `"properties`": {`"dnsPrefix`": `"$Cluster`"}}" | Set-Content -NoNewline -Path $ClusterBodyFile
+'{"properties": {"vmSize": "Standard_DS2_v2", "count": 2, "mode": "User"}}' | Set-Content -NoNewline -Path $NodePoolBodyFile
+
+Write-Host "-- PUT AKS managed cluster (async, 202 con cuerpo) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters/$Cluster`?api-version=$ApiAks" --body "@$ClusterBodyFile"
+
+Write-Host "-- GET AKS managed cluster (debe traer el pool 'default' sintetizado) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters/$Cluster`?api-version=$ApiAks"
+
+Write-Host "-- LIST AKS managed clusters --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters`?api-version=$ApiAks"
+
+Write-Host "-- PUT AKS agent pool (sub-recurso, async, 202) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters/$Cluster/agentPools/$NodePool`?api-version=$ApiAks" --body "@$NodePoolBodyFile"
+
+Write-Host "-- GET AKS agent pool --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters/$Cluster/agentPools/$NodePool`?api-version=$ApiAks"
+
+Write-Host "-- LIST AKS agent pools (default + userpool) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters/$Cluster/agentPools`?api-version=$ApiAks"
+
+Write-Host "-- POST listClusterUserCredential (kubeconfig base64) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters/$Cluster/listClusterUserCredential`?api-version=$ApiAks"
+
+Write-Host "-- DELETE AKS agent pool --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters/$Cluster/agentPools/$NodePool`?api-version=$ApiAks"
+
+Write-Host "-- DELETE AKS managed cluster (cascada sobre agentPools restantes) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerService/managedClusters/$Cluster`?api-version=$ApiAks"
+
+Remove-Item -Force $ClusterBodyFile, $NodePoolBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

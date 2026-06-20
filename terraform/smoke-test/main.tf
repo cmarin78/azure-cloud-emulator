@@ -157,6 +157,16 @@ variable "private_dns_zone" {
   default = "tfsmoke.internal"
 }
 
+variable "aks_cluster" {
+  type    = string
+  default = "tfsmokeaks"
+}
+
+variable "aks_node_pool" {
+  type    = string
+  default = "userpool"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -676,6 +686,34 @@ resource "null_resource" "private_dns_record" {
   }
 }
 
+# Fase 13 (AKS): managed cluster (ARM, asíncrono, "shape-compatible, not
+# behavior-complete" — no hay un control plane de Kubernetes real detrás)
+# + agent pool (sub-recurso, también asíncrono). Mismo patrón null_resource
+# + local-exec del resto del archivo.
+resource "null_resource" "aks_cluster" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    cluster = var.aks_cluster
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ContainerService/managedClusters/${var.aks_cluster}?api-version=2023-10-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"identity\": {\"type\": \"SystemAssigned\"}, \"properties\": {\"dnsPrefix\": \"${var.aks_cluster}\"}}'"
+  }
+}
+
+resource "null_resource" "aks_node_pool" {
+  depends_on = [null_resource.aks_cluster]
+  triggers = {
+    pool = var.aks_node_pool
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ContainerService/managedClusters/${var.aks_cluster}/agentPools/${var.aks_node_pool}?api-version=2023-10-01' -ContentType 'application/json' -Body '{\"properties\": {\"vmSize\": \"Standard_DS2_v2\", \"count\": 2, \"mode\": \"User\"}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -861,6 +899,17 @@ data "http" "private_dns_zone" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/privateDnsZones/${var.private_dns_zone}?api-version=2023-09-01"
 }
 
+# Fase 13 (AKS): verificación de lectura, mismo patrón.
+data "http" "aks_cluster" {
+  depends_on = [null_resource.aks_node_pool]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ContainerService/managedClusters/${var.aks_cluster}?api-version=2023-10-01"
+}
+
+data "http" "aks_node_pool" {
+  depends_on = [null_resource.aks_node_pool]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ContainerService/managedClusters/${var.aks_cluster}/agentPools/${var.aks_node_pool}?api-version=2023-10-01"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -991,4 +1040,12 @@ output "route_table_response" {
 
 output "private_dns_zone_response" {
   value = jsondecode(data.http.private_dns_zone.response_body)
+}
+
+output "aks_cluster_response" {
+  value = jsondecode(data.http.aks_cluster.response_body)
+}
+
+output "aks_node_pool_response" {
+  value = jsondecode(data.http.aks_node_pool.response_body)
 }
