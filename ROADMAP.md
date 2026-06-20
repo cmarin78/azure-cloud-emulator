@@ -485,6 +485,133 @@ needs no changes to host a Function App), the `az rest` smoke tests
 `destroy` cycle (`terraform/smoke-test/main.tf`, via the `http`
 provider).
 
-Future phases (ARM custom roles/RBAC) will be added as unplanned
-phases once the above is solid, the same way gcp-emulator grew past
-its original 8 phases.
+## Phase 15 — Entra ID (Azure AD) & RBAC 🔜 planned
+
+Standalone, but this is the phase most other future phases will lean
+on: managed identities (Phase 16) need a principal to assign roles to,
+and any resource's `identity` block needs a directory object behind
+it. Builds directly on top of the existing `internal/services/graph`
+(Microsoft Graph stub) and `internal/services/aadtoken` (fake AAD
+token issuer) from Phase 8, rather than starting a new package from
+scratch where it overlaps.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| App registrations (`Microsoft.Graph` `applications`, data-plane-shaped) | `graph` package (Phase 8) | `azuread_application`; the directory-side representation behind every service principal | S | planned |
+| Service principals (extend the existing `servicePrincipals` stub to support create, not just list) | App registrations | `azuread_service_principal`; currently the Phase 8 stub only supports `GET /v1.0/servicePrincipals` for `azurerm`'s own auth bootstrap | S | planned |
+| Custom role definitions (`Microsoft.Authorization/roleDefinitions`, ARM CRUD, sync) | resource groups (any scope) | `azurerm_role_definition`; defines a named set of `actions`/`notActions`, no real permission evaluation | S | planned |
+| Role assignments (`Microsoft.Authorization/roleAssignments`, ARM CRUD, sync) | role definitions, a principal (service principal or managed identity) | `azurerm_role_assignment`; links a principal to a role at a scope — same no-referential-integrity convention as the rest of the project, so the principal/role don't need to actually exist | S | planned |
+
+Like Key Vault's simulated cryptographic material, none of this
+performs real authorization — `roleAssignments` just persists the
+link; nothing in the emulator ever checks it before allowing a
+request. This is enough for `azurerm`/`azuread` Terraform configs that
+provision RBAC alongside real resources to apply and destroy cleanly
+against the emulator.
+
+## Phase 16 — Managed Identities 🔜 planned
+
+Depends conceptually on Phase 15 (a managed identity is a kind of
+service principal), but is implementable independently if Phase 15
+slips — the `identity` sub-object pattern below doesn't require role
+assignments to exist.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| User-assigned identities (`Microsoft.ManagedIdentity/userAssignedIdentities`, ARM CRUD, sync) | resource groups | `azurerm_user_assigned_identity`; a standalone identity resource other resources reference by id | S | planned |
+| System-assigned `identity` sub-object on existing resources (App Service sites, VMs, AKS clusters, Function Apps) | the resource it's attached to | `azurerm_linux_web_app`'s/`azurerm_linux_virtual_machine`'s/etc. `identity { type = "SystemAssigned" }` block expects a `principalId`/`tenantId` back on the parent resource, deterministic per resource like AKS's existing identity fields (Phase 13) | M | planned |
+
+System-assigned identities reuse the same deterministic-fake-value
+derivation already used for AKS's `identity.principalId`/`tenantId`
+(Phase 13) and Public IP's fake address (Phase 12) — an FNV-32a hash of
+the parent resource's ARM ID — so repeated GETs are stable. No new
+package needed for the sub-object part; it's a small addition to each
+existing resource's PUT handler (`appservice`, `compute`, `aks`,
+`functions`).
+
+## Phase 17 — Eventing (Event Grid + Event Hubs) 🔜 planned
+
+Independent of everything above; sized similarly to Service Bus
+(Phase 6), and likely the next package-sized addition after
+Phases 15/16 land.
+
+| Service | Minimum resources | Effort | Status |
+|---|---|---|---|
+| Event Grid | topics (ARM CRUD, sync), event subscriptions (ARM CRUD, sync, webhook/queue endpoint reference only, no real delivery), publish (data-plane, sync, just validates+discards the event) | M | planned |
+| Event Hubs | namespaces (ARM CRUD, async), event hubs + consumer groups (ARM CRUD, sync), send/receive (data-plane, simplified — no real partitioning/checkpointing) | M | planned |
+
+Mirrors Service Bus's split (Phase 6): namespace-level resources are
+async (matching real Azure's LRO pattern for both Event Hubs
+namespaces and Service Bus namespaces), child resources are sync.
+Event Grid event delivery and Event Hubs partitioning/checkpointing
+are both out of scope — "shape-compatible, not behavior-complete",
+same as every other messaging/eventing resource in this project; the
+goal is that `azurerm_eventgrid_topic`/`azurerm_eventhub_namespace`
+and friends can be provisioned and destroyed, not that events actually
+flow end to end.
+
+## Phase 18 — API Management 🔜 planned
+
+Standalone. Lower priority than Phases 15–17 — API Management's real
+value (policies, real gateway behavior, developer portal) is the part
+that's hardest to emulate meaningfully, so this phase intentionally
+stays narrow.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| APIM service instance (ARM CRUD, async) | resource groups | `azurerm_api_management`; the gateway/portal resource itself — provisioning in real Azure takes 30-45 minutes, a good candidate to fake as a long LRO that always succeeds | M | planned |
+| APIs + operations (ARM CRUD, sync, sub-resources) | APIM service | `azurerm_api_management_api`; defines the shape of what's "published", no real proxying behind it | S | planned |
+| Products + subscriptions (ARM CRUD, sync) | APIs | `azurerm_api_management_product`/`_subscription`; commonly provisioned alongside APIs in Terraform configs | S | planned |
+
+No request proxying, no policy evaluation, no real gateway runtime —
+this phase only makes the ARM control-plane resources that
+`azurerm_api_management*` Terraform resources expect to create/read/
+destroy.
+
+## Phase 19 — ARM template / Bicep deployments 🔜 planned
+
+Cross-cutting rather than a single resource family: this phase makes
+`Microsoft.Resources/deployments` itself work, so a whole template
+(JSON ARM template or compiled-from-Bicep JSON) can be submitted in
+one call instead of one resource per `az rest`/Terraform resource
+block.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| `PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Resources/deployments/{name}` (async) | every resource type the submitted template references | `az deployment group create`; needs to parse a `resources[]` array and dispatch each entry to the matching existing service's internal handler rather than re-implementing resource creation | L | planned |
+| `GET .../deployments/{name}` + `deployments/{name}/operations` (sync) | the deployment PUT above | Terraform/az CLI poll these to know when a deployment LRO finished and to show per-resource operation results | S | planned |
+| `POST .../deployments/{name}/validate` (sync, always succeeds) | — | `az deployment group validate`/Terraform's plan-adjacent dry-run; the emulator has no real validation rules to enforce, so this is a shape-only stub | S | planned |
+
+This is the largest planned phase (`L` effort) because it's not a new
+resource type but a dispatcher: it needs to walk an arbitrary
+template's `resources[]` array, resolve simple ARM template functions
+(`resourceId()`, `parameters()`, `variables()` — a useful, deliberately
+incomplete subset) and `dependsOn` ordering, then forward each
+resolved resource to its existing service package's internal PUT
+logic. `what-if` is out of scope (it requires diffing against current
+state in a way none of the other phases need); `validate` always
+returns success.
+
+## Maintenance / cross-cutting (no fixed phase number)
+
+These aren't blocked on anything above and can be picked up whenever
+useful, independent of the phase order:
+
+- **`scripts/test-az-cli.sh`/`.ps1` state cleanup**: currently a
+  partial/interrupted run followed by a full re-run can leave stale
+  table/entity rows in BoltDB, producing `TableAlreadyExists`/
+  `EntityAlreadyExists` `Conflict` errors on the next full run (seen
+  during Phase 14's live verification). Fix by having the script
+  delete-then-create (or skip-if-exists) for every resource it touches,
+  the same idempotent-setup pattern already used elsewhere in the
+  script, rather than assuming a pristine DB.
+- **Web console catch-up**: `web/console` (Phase 7) only covers the six
+  resource types implemented through Phase 6 — Monitor/Log Analytics
+  (Phase 10), App Service (Phase 11), the Phase 12 networking
+  additions (NSGs, Public IPs, Load Balancers, Route Tables, Private
+  DNS), AKS (Phase 13), and Functions (Phase 14) have no web UI yet,
+  only REST/az CLI/Terraform access.
+
+Further phases beyond these will keep being added as unplanned phases
+once the above is solid, the same way gcp-emulator grew past its
+original 8 phases.
