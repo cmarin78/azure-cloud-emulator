@@ -71,8 +71,13 @@ including a synthesized default agent pool) and agent pools (ARM CRUD,
 async, independently routable sub-resource) plus
 `listClusterUserCredential`/`listClusterAdminCredential` (sync, fake
 base64 kubeconfig) are implemented — shape-compatible only, there is
-no real Kubernetes control plane behind it. See
-[ROADMAP.md](ROADMAP.md) for the next phases.
+no real Kubernetes control plane behind it. Phase 14 (Functions) is
+done: function definitions (ARM CRUD, sync, sub-resource of an App
+Service site) plus `syncfunctiontriggers` and `host/default/listkeys`
+actions are implemented — a Function App itself is just a
+`Microsoft.Web/sites` resource with `kind="functionapp[,linux]"`,
+already fully supported by Phase 11's App Service implementation with
+no changes. See [ROADMAP.md](ROADMAP.md) for the next phases.
 
 Planned scope (subject to change as work progresses):
 
@@ -125,6 +130,12 @@ Planned scope (subject to change as work progresses):
   `listClusterUserCredential`/`listClusterAdminCredential` (sync, fake
   base64 kubeconfig) — shape-compatible only, no real Kubernetes
   control plane.
+- **Functions**: ✅ function definitions (ARM CRUD, sync, sub-resource
+  of an App Service site), ✅ `syncfunctiontriggers` (sync action, no
+  body), ✅ `host/default/listkeys` (sync action, deterministic fake
+  `masterKey`/`functionKeys`) — the Function App itself needs no new
+  code, it's a `Microsoft.Web/sites` resource already supported by
+  Phase 11's App Service implementation.
 
 ## Project structure
 
@@ -145,6 +156,7 @@ internal/services/cosmosdb/     Microsoft.DocumentDB/databaseAccounts, sqlDataba
 internal/services/monitor/      Microsoft.OperationalInsights/workspaces + Microsoft.Insights/actionGroups, metricAlerts (ARM CRUD) + Log Analytics Query stub (POST /v1/workspaces/{id}/query)
 internal/services/appservice/   Microsoft.Web/serverfarms (App Service Plans) + sites (Web Apps, ARM CRUD) + start/stop/restart actions + config/appsettings sub-resource
 internal/services/aks/          Microsoft.ContainerService/managedClusters (ARM CRUD, async) + agentPools sub-resource (ARM CRUD, async) + listClusterUserCredential/listClusterAdminCredential actions
+internal/services/functions/    Microsoft.Web/sites/functions sub-resource (ARM CRUD, sync) + syncfunctiontriggers/host/default/listkeys actions (Function App site itself is handled by appservice)
 internal/services/armmeta/      fake ARM metadata document (/metadata/endpoints) so az CLI/azurerm can discover this emulator as a custom cloud
 internal/services/aadtoken/     fake Azure AD token issuer (/login/{tenant}/oauth2/v2.0/token) accepting any client_id/secret
 internal/services/graph/        minimal Microsoft Graph stub (GET /v1.0/servicePrincipals) so azurerm can resolve a service principal's object ID
@@ -320,8 +332,13 @@ cluster create (async)/get (synthesized default agent pool + fake
 `fqdn`)/list, agent pool put (async)/get/list (default + the new pool,
 both reflected on the parent cluster's `agentPoolProfiles`),
 `listClusterUserCredential` (base64 kubeconfig), agent pool delete,
-and managed cluster delete cascading over any remaining agent pools)
-end to end against a running emulator instance.
+and managed cluster delete cascading over any remaining agent pools),
+and Functions (App Service Plan Y1/Dynamic create, Function App
+create (`kind=functionapp,linux`, reusing the existing `appservice`
+implementation), function definition put/get/list, `syncfunctiontriggers`
+(204, no body), `host/default/listkeys` (non-empty `masterKey`), and
+cleanup deletes of the function/app/plan) end to end against a running
+emulator instance.
 
 **Terraform** — `terraform/smoke-test/` uses the generic `http` provider
 plus `local-exec` to verify every REST endpoint responds with the
@@ -342,9 +359,11 @@ alert (referencing the action group by id), an App Service Plan +
 Web App (referencing the plan by id) + app settings, and Networking
 (NSG + security rule, Public IP, Load Balancer referencing the Public
 IP by id plus inline frontend/backend/rule, Route Table + route, and
-a Private DNS zone + A record), and an AKS managed cluster + agent
-pool, against the running emulator, then reads each one back via
-`data "http"` blocks and exposes the parsed JSON as outputs.
+a Private DNS zone + A record), an AKS managed cluster + agent pool,
+and a Functions App Service Plan + Function App + function definition
+(plus a `syncfunctiontriggers` call), against the running emulator,
+then reads each one back via `data "http"` blocks and exposes the
+parsed JSON as outputs.
 
 **Terraform with the real `azurerm` provider** — `terraform/azurerm-smoke-test/`
 points the actual `hashicorp/azurerm` provider at the emulator (not the

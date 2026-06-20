@@ -440,6 +440,51 @@ and agent-pool-mode validation, and missing-parent-cluster 404), the
 `terraform apply`/`destroy` cycle (`terraform/smoke-test/main.tf`, via
 the `http` provider).
 
-Future phases (Functions, ARM custom roles/RBAC) will be added as
-unplanned phases once the above is solid, the same way gcp-emulator
-grew past its original 8 phases.
+## Phase 14 — Functions ✅ completed
+
+Standalone, no dependency on Compute/Networking beyond a resource group.
+A Function App **is** a `Microsoft.Web/sites` resource (`kind=
+"functionapp"`/`"functionapp,linux"`) — already fully supported by
+`appservice.putSite` from Phase 11 without any changes. This phase only
+adds the `Microsoft.Web/sites/functions` sub-resource plus two action
+routes, both living in their own `internal/services/functions` package.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| Function definitions (ARM CRUD, sync, sub-resource of a site) | App Service sites (Phase 11) | `azurerm_function_app_function`; one routable resource per function in the app | S | done |
+| `syncfunctiontriggers` (sync action, no body) | Function App site | `az functionapp` and Terraform call this after deploying code; the emulator has no real deploy step, so it's a no-op 204 | S | done |
+| `host/default/listkeys` (sync action, data-plane-shaped) | Function App site | `azurerm`'s `default_hostname`-adjacent key lookups and `az functionapp keys list` both expect a `masterKey`/`functionKeys` JSON body back | S | done |
+
+Function definitions are fully synchronous (no LRO), matching App
+Service's site/plan resources from Phase 11. `language` and
+`config.bindings` are persisted as-is from the request body without
+any validation — same "shape-compatible, not behavior-complete"
+approach as Key Vault's simulated cryptographic material and AKS's
+unevaluated `provisioningState`. `invoke_url_template` is derived
+deterministically from the parent site's `defaultHostName` (itself
+deterministic per Phase 11) plus the function's name, so it stays
+stable across repeated GETs without being persisted separately.
+Neither function definitions nor the App Service Plan/site they
+reference are validated for existence — same no-referential-integrity
+convention used throughout (Monitor's action-group reference, App
+Service's `serverFarmId`, AKS's subnet reference). `host/default/
+listkeys` returns a `masterKey` and a `functionKeys.default` entry,
+both deterministic fake values (FNV-32a hash of the site's resource
+ID, same derivation pattern as Public IP's fake `ipAddress` in Phase
+12 and AKS's fake `fqdn`/identity in Phase 13) rather than random, so
+repeated calls return the same keys. Function definition deletes are
+idempotent (204 if missing, matching resource groups' convention).
+Confirmed via `functions_test.go` (`httptest`, covering function
+definition CRUD, `syncfunctiontriggers`, `listkeys`, and that an
+App Service Plan/site created via the existing `appservice` package
+needs no changes to host a Function App), the `az rest` smoke tests
+(`scripts/test-az-cli.sh`/`.ps1` — App Service Plan Y1/Dynamic create
+→ Function App create → function definition put/get/list →
+`syncfunctiontriggers` (204) → `host/default/listkeys` (non-empty
+`masterKey`) → cleanup deletes), and a real `terraform apply`/
+`destroy` cycle (`terraform/smoke-test/main.tf`, via the `http`
+provider).
+
+Future phases (ARM custom roles/RBAC) will be added as unplanned
+phases once the above is solid, the same way gcp-emulator grew past
+its original 8 phases.

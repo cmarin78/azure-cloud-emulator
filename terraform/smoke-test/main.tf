@@ -167,6 +167,21 @@ variable "aks_node_pool" {
   default = "userpool"
 }
 
+variable "func_plan" {
+  type    = string
+  default = "tfsmokefuncplan"
+}
+
+variable "func_app" {
+  type    = string
+  default = "tfsmokefuncapp"
+}
+
+variable "func_name" {
+  type    = string
+  default = "HttpTrigger1"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -179,6 +194,7 @@ locals {
   app_service_plan_id = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.app_service_plan}"
   public_ip_id        = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/publicIPAddresses/${var.public_ip}"
   load_balancer_id    = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/loadBalancers/${var.load_balancer}"
+  func_plan_id        = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.func_plan}"
 }
 
 # PUT resource group (data source con `http` no soporta PUT, así que usamos
@@ -714,6 +730,65 @@ resource "null_resource" "aks_node_pool" {
   }
 }
 
+# Fase 14 (Functions): un Function App ES un Microsoft.Web/sites con
+# kind="functionapp,linux" — ya soportado por appservice.putSite sin
+# cambios (ver internal/services/functions/functiondefs.go). El plan usa
+# SKU Y1/Dynamic (consumption plan real de Azure Functions). El sub-recurso
+# Microsoft.Web/sites/functions/{name} es síncrono y no valida que el site
+# padre exista (mismo "sin integridad referencial estricta" que
+# metric_alert/action_group arriba). Mismo patrón null_resource + local-exec
+# del resto del archivo.
+resource "null_resource" "func_plan" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    plan = var.func_plan
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.func_plan}?api-version=2022-03-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"kind\": \"functionapp\", \"sku\": {\"name\": \"Y1\", \"tier\": \"Dynamic\"}}'"
+  }
+}
+
+resource "null_resource" "func_app" {
+  depends_on = [null_resource.func_plan]
+  triggers = {
+    app = var.func_app
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.func_app}?api-version=2022-03-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"kind\": \"functionapp,linux\", \"properties\": {\"serverFarmId\": \"${local.func_plan_id}\"}}'"
+  }
+}
+
+resource "null_resource" "func_definition" {
+  depends_on = [null_resource.func_app]
+  triggers = {
+    name = var.func_name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.func_app}/functions/${var.func_name}?api-version=2022-03-01' -ContentType 'application/json' -Body '{\"properties\": {\"language\": \"python\", \"config\": {\"bindings\": [{\"type\": \"httpTrigger\", \"direction\": \"in\", \"authLevel\": \"function\"}]}}}'"
+  }
+}
+
+# syncfunctiontriggers es una acción sync sin cuerpo (204) — se invoca vía
+# null_resource/local-exec porque no es una lectura idempotente (el
+# provider `http` solo hace GET).
+resource "null_resource" "func_sync_triggers" {
+  depends_on = [null_resource.func_definition]
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Post -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.func_app}/syncfunctiontriggers?api-version=2022-03-01'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -910,6 +985,24 @@ data "http" "aks_node_pool" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ContainerService/managedClusters/${var.aks_cluster}/agentPools/${var.aks_node_pool}?api-version=2023-10-01"
 }
 
+# Fase 14 (Functions): verificación de lectura, mismo patrón. listkeys no
+# se modela como data source porque es un POST (no GET) — su verificación
+# vive en scripts/test-az-cli.ps1/.sh, no aquí.
+data "http" "func_plan" {
+  depends_on = [null_resource.func_plan]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.func_plan}?api-version=2022-03-01"
+}
+
+data "http" "func_app" {
+  depends_on = [null_resource.func_app]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.func_app}?api-version=2022-03-01"
+}
+
+data "http" "func_definition" {
+  depends_on = [null_resource.func_sync_triggers]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/sites/${var.func_app}/functions/${var.func_name}?api-version=2022-03-01"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -1048,4 +1141,16 @@ output "aks_cluster_response" {
 
 output "aks_node_pool_response" {
   value = jsondecode(data.http.aks_node_pool.response_body)
+}
+
+output "func_plan_response" {
+  value = jsondecode(data.http.func_plan.response_body)
+}
+
+output "func_app_response" {
+  value = jsondecode(data.http.func_app.response_body)
+}
+
+output "func_definition_response" {
+  value = jsondecode(data.http.func_definition.response_body)
 }

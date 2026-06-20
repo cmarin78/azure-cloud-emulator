@@ -727,6 +727,56 @@ echo "-- DELETE AKS managed cluster (cascada sobre agentPools restantes) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}?api-version=${API_AKS}"
 
+API_FUNCTIONS="2022-03-01"
+FUNC_PLAN="smoketestfuncplan"
+FUNC_APP="smoketestfuncapp"
+FUNC_NAME="HttpTrigger1"
+
+FUNC_PLAN_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${FUNC_PLAN}"
+
+echo "-- PUT App Service Plan para Functions (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${FUNC_PLAN}?api-version=${API_APPSERVICE}" \
+  --body "{\"location\": \"${LOCATION}\", \"sku\": {\"name\": \"Y1\", \"tier\": \"Dynamic\"}}"
+
+echo "-- PUT Function App (Microsoft.Web/sites con kind=functionapp; cubierto por appservice) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}?api-version=${API_FUNCTIONS}" \
+  --body "{\"location\": \"${LOCATION}\", \"kind\": \"functionapp,linux\", \"properties\": {\"serverFarmId\": \"${FUNC_PLAN_ID}\"}}"
+
+echo "-- PUT function definition (sub-recurso Microsoft.Web/sites/functions) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}/functions/${FUNC_NAME}?api-version=${API_FUNCTIONS}" \
+  --body "{\"properties\": {\"language\": \"python\", \"config\": {\"bindings\": [{\"type\": \"httpTrigger\", \"direction\": \"in\", \"authLevel\": \"function\"}]}}}"
+
+echo "-- GET function definition --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}/functions/${FUNC_NAME}?api-version=${API_FUNCTIONS}"
+
+echo "-- LIST function definitions --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}/functions?api-version=${API_FUNCTIONS}"
+
+echo "-- POST syncfunctiontriggers (sync, 204 sin cuerpo) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}/syncfunctiontriggers?api-version=${API_FUNCTIONS}"
+
+echo "-- POST host/default/listkeys (masterKey + functionKeys.default deterministas) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}/host/default/listkeys?api-version=${API_FUNCTIONS}"
+
+echo "-- DELETE function definition --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}/functions/${FUNC_NAME}?api-version=${API_FUNCTIONS}"
+
+echo "-- DELETE Function App --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}?api-version=${API_FUNCTIONS}"
+
+echo "-- DELETE App Service Plan para Functions --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${FUNC_PLAN}?api-version=${API_APPSERVICE}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

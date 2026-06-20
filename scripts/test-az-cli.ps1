@@ -653,6 +653,52 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $ClusterBodyFile, $NodePoolBodyFile -ErrorAction SilentlyContinue
 
+$ApiFunctions = "2022-03-01"
+$FuncPlan = "smoketestfuncplan"
+$FuncApp = "smoketestfuncapp"
+$FuncName = "HttpTrigger1"
+
+$FuncPlanBodyFile = New-TemporaryFile
+$FuncAppBodyFile = New-TemporaryFile
+$FuncDefBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`", `"sku`": {`"name`": `"Y1`", `"tier`": `"Dynamic`"}}" | Set-Content -NoNewline -Path $FuncPlanBodyFile
+
+$FuncPlanId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/serverfarms/$FuncPlan"
+"{`"location`": `"$Location`", `"kind`": `"functionapp,linux`", `"properties`": {`"serverFarmId`": `"$FuncPlanId`"}}" | Set-Content -NoNewline -Path $FuncAppBodyFile
+'{"properties": {"language": "python", "config": {"bindings": [{"type": "httpTrigger", "direction": "in", "authLevel": "function"}]}}}' | Set-Content -NoNewline -Path $FuncDefBodyFile
+
+Write-Host "-- PUT App Service Plan para Functions (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/serverfarms/$FuncPlan`?api-version=$ApiAppService" --body "@$FuncPlanBodyFile"
+
+Write-Host "-- PUT Function App (Microsoft.Web/sites con kind=functionapp; cubierto por appservice) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$FuncApp`?api-version=$ApiFunctions" --body "@$FuncAppBodyFile"
+
+Write-Host "-- PUT function definition (sub-recurso Microsoft.Web/sites/functions) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$FuncApp/functions/$FuncName`?api-version=$ApiFunctions" --body "@$FuncDefBodyFile"
+
+Write-Host "-- GET function definition --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$FuncApp/functions/$FuncName`?api-version=$ApiFunctions"
+
+Write-Host "-- LIST function definitions --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$FuncApp/functions`?api-version=$ApiFunctions"
+
+Write-Host "-- POST syncfunctiontriggers (sync, 204 sin cuerpo) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$FuncApp/syncfunctiontriggers`?api-version=$ApiFunctions"
+
+Write-Host "-- POST host/default/listkeys (masterKey + functionKeys.default deterministas) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$FuncApp/host/default/listkeys`?api-version=$ApiFunctions"
+
+Write-Host "-- DELETE function definition --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$FuncApp/functions/$FuncName`?api-version=$ApiFunctions"
+
+Write-Host "-- DELETE Function App --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$FuncApp`?api-version=$ApiFunctions"
+
+Write-Host "-- DELETE App Service Plan para Functions --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/serverfarms/$FuncPlan`?api-version=$ApiAppService"
+
+Remove-Item -Force $FuncPlanBodyFile, $FuncAppBodyFile, $FuncDefBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

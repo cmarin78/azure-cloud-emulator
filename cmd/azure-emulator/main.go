@@ -18,6 +18,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
+	"github.com/cesarmarin/azure-emulator/internal/services/functions"
 	"github.com/cesarmarin/azure-emulator/internal/services/graph"
 	"github.com/cesarmarin/azure-emulator/internal/services/keyvault"
 	"github.com/cesarmarin/azure-emulator/internal/services/monitor"
@@ -89,6 +90,7 @@ func main() {
 	cosmosSvc.Register(srv.Mux())
 	monitor.New(db).Register(srv.Mux())
 	appservice.New(db).Register(srv.Mux())
+	functions.New(db).Register(srv.Mux())
 	aks.New(db, ops).Register(srv.Mux())
 	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc)
 
