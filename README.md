@@ -18,7 +18,7 @@ their endpoints to `localhost`.
 
 ## Current status
 
-All 15 core phases below are complete, plus Phase 20 (real Action Group
+All 16 core phases below are complete, plus Phase 20 (real Action Group
 webhook delivery). See [ROADMAP.md](ROADMAP.md) for what's planned next
 (the rest of the behavioral/real-delivery layer inspired by
 gcp-emulator's own Phase 11).
@@ -40,6 +40,7 @@ gcp-emulator's own Phase 11).
 | 13 | AKS | Managed clusters + agent pools (async), `listClusterUserCredential`/`listClusterAdminCredential` — shape-compatible only, no real Kubernetes control plane |
 | 14 | Functions | Function definitions, `syncfunctiontriggers`, `host/default/listkeys` — reuses Phase 11's App Service site, no new resource type needed |
 | 15 | Entra ID & RBAC | App registrations, service principals, custom role definitions, role assignments (scope-isolated subscription/resource-group storage) — no real directory or authorization evaluation |
+| 16 | Managed Identities | User-assigned identities (`Microsoft.ManagedIdentity/userAssignedIdentities`, ARM CRUD, sync), `identity.type=SystemAssigned` sub-object on App Service sites, VMs, and AKS clusters — deterministic fake `tenantId`/`principalId`/`clientId` |
 | 20 | Action Groups: real webhook delivery | `POST .../actionGroups/{name}/createNotifications` dispatches a real HTTP POST to each `webhookReceivers` entry; result recorded via `lastNotificationTime`/`lastNotificationStatus` (emulator-only fields) |
 
 ### Feature matrix (detail)
@@ -107,6 +108,13 @@ gcp-emulator's own Phase 11).
   (`Microsoft.Authorization/roleAssignments`, ARM CRUD, sync,
   scope-isolated subscription/resource-group storage) — no real
   directory or authorization evaluation behind it.
+- **Managed Identities**: ✅ user-assigned identities
+  (`Microsoft.ManagedIdentity/userAssignedIdentities`, ARM CRUD, sync,
+  deterministic fake `tenantId`/`principalId`/`clientId` preserved
+  across updates), ✅ `identity.type=SystemAssigned` sub-object on App
+  Service sites (Phase 11, including Function Apps via Phase 14),
+  virtual machines (Phase 4), and AKS managed clusters (Phase 13) —
+  each deterministic per resource, no real directory behind either.
 - **Action Groups real webhook delivery (Phase 20)**: ✅
   `POST .../actionGroups/{name}/createNotifications` sends a real HTTP
   POST (Azure common-alert-schema-shaped JSON body) to every

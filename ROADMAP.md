@@ -556,25 +556,48 @@ apply`/`destroy` cycle (`terraform/smoke-test/main.tf`, via the `http`
 provider, including a `data.http.role_assignments_sub_list` check that
 re-verifies the same scope-isolation behavior from Terraform's side).
 
-## Phase 16 — Managed Identities 🔜 planned
+## Phase 16 — Managed Identities ✅ completed
 
-Depends conceptually on Phase 15 (a managed identity is a kind of
-service principal), but is implementable independently if Phase 15
-slips — the `identity` sub-object pattern below doesn't require role
-assignments to exist.
+Depended conceptually on Phase 15 (a managed identity is a kind of
+service principal), but ended up implementable independently — the
+`identity` sub-object pattern below doesn't require role assignments
+to exist.
 
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| User-assigned identities (`Microsoft.ManagedIdentity/userAssignedIdentities`, ARM CRUD, sync) | resource groups | `azurerm_user_assigned_identity`; a standalone identity resource other resources reference by id | S | planned |
-| System-assigned `identity` sub-object on existing resources (App Service sites, VMs, AKS clusters, Function Apps) | the resource it's attached to | `azurerm_linux_web_app`'s/`azurerm_linux_virtual_machine`'s/etc. `identity { type = "SystemAssigned" }` block expects a `principalId`/`tenantId` back on the parent resource, deterministic per resource like AKS's existing identity fields (Phase 13) | M | planned |
+| User-assigned identities (`Microsoft.ManagedIdentity/userAssignedIdentities`, ARM CRUD, sync) | resource groups | `azurerm_user_assigned_identity`; a standalone identity resource other resources reference by id | S | done |
+| System-assigned `identity` sub-object on existing resources (App Service sites, VMs, AKS clusters) | the resource it's attached to | `azurerm_linux_web_app`'s/`azurerm_linux_virtual_machine`'s/etc. `identity { type = "SystemAssigned" }` block expects a `principalId`/`tenantId` back on the parent resource, deterministic per resource like AKS's existing identity fields (Phase 13) | M | done |
 
-System-assigned identities reuse the same deterministic-fake-value
-derivation already used for AKS's `identity.principalId`/`tenantId`
-(Phase 13) and Public IP's fake address (Phase 12) — an FNV-32a hash of
-the parent resource's ARM ID — so repeated GETs are stable. No new
-package needed for the sub-object part; it's a small addition to each
-existing resource's PUT handler (`appservice`, `compute`, `aks`,
-`functions`).
+Implemented in a new `internal/services/managedidentity` package
+(`Microsoft.ManagedIdentity`, registered in `resourcemanager.go`'s
+`registeredNamespaces` and wired in `cmd/azure-emulator/main.go`).
+User-assigned identities are fully synchronous (no LRO), matching the
+rest of the no-real-evaluation resource families in this emulator;
+deletes are idempotent (200 if it existed, 204 if not, matching
+resource groups' convention). System-assigned identities reuse the
+same deterministic-fake-value derivation already used for AKS's
+`identity.principalId`/`tenantId` (Phase 13) and Public IP's fake
+address (Phase 12) — an FNV-32a hash of the parent resource's full ARM
+ID plus a distinguishing suffix (`-tenant`/`-principal`/`-client`), so
+both `tenantId`/`principalId`/`clientId` on a user-assigned identity
+and `principalId`/`tenantId` on a system-assigned `identity` block are
+stable across repeated GETs and preserved across updates (confirmed
+live: two successive PUTs of the same user-assigned identity return
+the same `principalId`). No new package needed for the sub-object
+part — each of `appservice` (Web Apps/Function App sites), `compute`
+(VMs), and `aks` (managed clusters) keeps its own small `Identity`
+struct and derives the same way, rather than sharing one type across
+packages; Function Apps get this for free since a Function App **is**
+an `appservice` site (Phase 14). Confirmed via `managedidentity_test.go`
+and the existing `appservice_test.go`/`compute_test.go`/`aks_test.go`
+(`httptest`), the `az rest` smoke tests (`scripts/test-az-cli.sh`/
+`.ps1` — identity PUT/GET/LIST, a supporting VNet/subnet/NIC, a VM
+created with `identity.type=SystemAssigned`, GET confirming non-empty
+`principalId`/`tenantId`, then cleanup deletes in reverse dependency
+order including a DELETE-twice idempotency check on the identity), and
+a real `terraform apply`/`destroy` cycle
+(`terraform/smoke-test/main.tf`, via the `http` provider, with a
+`data.http.user_assigned_identity` read-back check).
 
 ## Phase 17 — Eventing (Event Grid + Event Hubs) 🔜 planned
 

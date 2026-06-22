@@ -160,6 +160,62 @@ func TestSiteLifecycle(t *testing.T) {
 	}
 }
 
+// TestSiteSystemAssignedIdentity cubre Phase 16: un site con
+// identity.type "SystemAssigned" debe devolver un principalId/tenantId
+// deterministas (no vacíos) y estables entre PUTs, mismo comportamiento
+// que aks.TestManagedClusterLifecycle ya verifica para AKS.
+func TestSiteSystemAssignedIdentity(t *testing.T) {
+	srv := newTestServer(t)
+	planID := "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/serverfarms/myplan"
+	base := srv.URL + "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/sites/mysite"
+
+	body := map[string]any{
+		"location": "eastus",
+		"identity": map[string]any{"type": "SystemAssigned"},
+		"properties": map[string]any{
+			"serverFarmId": planID,
+		},
+	}
+
+	var site Site
+	status := testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(base), body, &site)
+	if status != http.StatusCreated {
+		t.Fatalf("put site with identity: status=%d", status)
+	}
+	if site.Identity == nil || site.Identity.Type != "SystemAssigned" || site.Identity.PrincipalID == "" || site.Identity.TenantID == "" {
+		t.Fatalf("expected a populated SystemAssigned identity, got %+v", site.Identity)
+	}
+
+	var again Site
+	status = testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(base), body, &again)
+	if status != http.StatusOK {
+		t.Fatalf("put site again: status=%d", status)
+	}
+	if again.Identity.PrincipalID != site.Identity.PrincipalID || again.Identity.TenantID != site.Identity.TenantID {
+		t.Fatalf("expected deterministic identity across PUTs, got %+v vs %+v", site.Identity, again.Identity)
+	}
+}
+
+// TestSiteWithoutIdentityOmitsIdentity cubre el caso por defecto (sin
+// bloque "identity" en el request): el campo debe quedar nil.
+func TestSiteWithoutIdentityOmitsIdentity(t *testing.T) {
+	srv := newTestServer(t)
+	planID := "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/serverfarms/myplan"
+	base := srv.URL + "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/sites/mysite"
+
+	var site Site
+	status := testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(base), map[string]any{
+		"location":   "eastus",
+		"properties": map[string]any{"serverFarmId": planID},
+	}, &site)
+	if status != http.StatusCreated {
+		t.Fatalf("put site: status=%d", status)
+	}
+	if site.Identity != nil {
+		t.Fatalf("expected nil identity when not requested, got %+v", site.Identity)
+	}
+}
+
 func TestSiteRequiresLocationAndServerFarmID(t *testing.T) {
 	srv := newTestServer(t)
 	base := testutil.WithAPIVersion(srv.URL + "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/sites/mysite")

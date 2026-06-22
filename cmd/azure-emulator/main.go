@@ -22,6 +22,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/functions"
 	"github.com/cesarmarin/azure-emulator/internal/services/graph"
 	"github.com/cesarmarin/azure-emulator/internal/services/keyvault"
+	"github.com/cesarmarin/azure-emulator/internal/services/managedidentity"
 	"github.com/cesarmarin/azure-emulator/internal/services/monitor"
 	"github.com/cesarmarin/azure-emulator/internal/services/network"
 	"github.com/cesarmarin/azure-emulator/internal/services/queue"
@@ -94,6 +95,7 @@ func main() {
 	functions.New(db).Register(srv.Mux())
 	aks.New(db, ops).Register(srv.Mux())
 	authorization.New(db).Register(srv.Mux())
+	managedidentity.New(db).Register(srv.Mux())
 	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc)
 
 	// Descubrimiento de metadata ARM + emisor de tokens AAD falso: permiten

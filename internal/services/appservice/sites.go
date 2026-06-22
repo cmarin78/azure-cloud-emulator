@@ -3,6 +3,7 @@ package appservice
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"net/http"
 	"strings"
 
@@ -32,7 +33,19 @@ type Site struct {
 	Location   string            `json:"location"`
 	Tags       map[string]string `json:"tags,omitempty"`
 	Kind       string            `json:"kind,omitempty"`
+	Identity   *Identity         `json:"identity,omitempty"`
 	Properties SiteProperties    `json:"properties"`
+}
+
+// Identity replica el bloque "identity" estándar de ARM (Phase 16, mismo
+// shape que aks.Identity/compute.Identity — cada paquete mantiene su propia
+// copia local en vez de compartir un tipo central, igual convención que
+// fakeHexSuffix/fakeGUID más abajo). Function Apps (Phase 14) reutilizan
+// este mismo Site, así que heredan soporte de identity sin cambios.
+type Identity struct {
+	Type        string `json:"type"`
+	PrincipalID string `json:"principalId,omitempty"`
+	TenantID    string `json:"tenantId,omitempty"`
 }
 
 type SiteProperties struct {
@@ -49,6 +62,7 @@ type siteRequest struct {
 	Location   string            `json:"location"`
 	Tags       map[string]string `json:"tags,omitempty"`
 	Kind       string            `json:"kind"`
+	Identity   *Identity         `json:"identity,omitempty"`
 	Properties struct {
 		ServerFarmID string `json:"serverFarmId"`
 		HTTPSOnly    *bool  `json:"httpsOnly"`
@@ -73,6 +87,21 @@ func siteID(subID, rg, name string) string {
 // mismo nombre, sin necesidad de un registro DNS real detrás.
 func defaultHostName(name string) string {
 	return strings.ToLower(name) + ".azurewebsites.net"
+}
+
+// fakeHexSuffix/fakeGUID derivan valores deterministas a partir del ID
+// completo del recurso, mismo patrón que aks.fakeHexSuffix/fakeGUID
+// (Phase 13) y compute.fakeHexSuffix/fakeGUID (Phase 16) — cada paquete
+// mantiene su propia copia local en vez de un helper compartido.
+func fakeHexSuffix(seed string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(seed))
+	return h.Sum32()
+}
+
+func fakeGUID(seed string) string {
+	sum := fakeHexSuffix(seed)
+	return fmt.Sprintf("%08x-0000-0000-0000-%012x", sum, uint64(sum)*2654435761)
 }
 
 func (s *Service) registerSites(mux *http.ServeMux) {
@@ -142,13 +171,24 @@ func (s *Service) putSite(w http.ResponseWriter, r *http.Request) {
 		state = existing.Properties.State
 	}
 
+	id := siteID(subID, rg, name)
+	var identity *Identity
+	if req.Identity != nil {
+		identity = &Identity{Type: req.Identity.Type}
+		if req.Identity.Type != "" && req.Identity.Type != "None" {
+			identity.PrincipalID = fakeGUID(id + "-principal")
+			identity.TenantID = fakeGUID(id + "-tenant")
+		}
+	}
+
 	site := Site{
-		ID:       siteID(subID, rg, name),
+		ID:       id,
 		Name:     name,
 		Type:     "Microsoft.Web/sites",
 		Location: req.Location,
 		Tags:     req.Tags,
 		Kind:     req.Kind,
+		Identity: identity,
 		Properties: SiteProperties{
 			ProvisioningState: "Succeeded",
 			ServerFarmID:      req.Properties.ServerFarmID,

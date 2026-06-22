@@ -782,6 +782,71 @@ az rest --method delete --url "$Endpoint/v1.0/applications/$AppObjectId"
 
 Remove-Item -Force $AppBodyFile, $SpBodyFile, $RoleDefBodyFile, $RoleAssignBodyFile -ErrorAction SilentlyContinue
 
+$ApiManagedIdentity = "2023-01-31"
+$Identity = "smoketestidentity"
+
+$IdentityBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $IdentityBodyFile
+
+Write-Host "-- PUT user-assigned managed identity (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$Identity`?api-version=$ApiManagedIdentity" --body "@$IdentityBodyFile"
+
+Write-Host "-- GET user-assigned managed identity (tenantId/principalId/clientId deterministas) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$Identity`?api-version=$ApiManagedIdentity"
+
+Write-Host "-- LIST user-assigned managed identities --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities`?api-version=$ApiManagedIdentity"
+
+$IdentityVnet = "smoketest-identity-vnet"
+$IdentitySubnet = "default"
+$IdentityNic = "smoketest-identity-nic"
+$IdentityVm = "smoketest-identity-vm"
+
+$IdentityVnetBodyFile = New-TemporaryFile
+$IdentitySubnetBodyFile = New-TemporaryFile
+$IdentityNicBodyFile = New-TemporaryFile
+$IdentityVmBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`", `"properties`": {`"addressSpace`": {`"addressPrefixes`": [`"10.1.0.0/16`"]}}}" | Set-Content -NoNewline -Path $IdentityVnetBodyFile
+'{"properties": {"addressPrefix": "10.1.1.0/24"}}' | Set-Content -NoNewline -Path $IdentitySubnetBodyFile
+
+Write-Host "-- PUT virtual network (de soporte, para una VM con identidad) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/virtualNetworks/$IdentityVnet`?api-version=$ApiNetwork" --body "@$IdentityVnetBodyFile"
+
+Write-Host "-- PUT subnet (de soporte) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/virtualNetworks/$IdentityVnet/subnets/$IdentitySubnet`?api-version=$ApiNetwork" --body "@$IdentitySubnetBodyFile"
+
+$IdentitySubnetId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/virtualNetworks/$IdentityVnet/subnets/$IdentitySubnet"
+"{`"location`": `"$Location`", `"properties`": {`"ipConfigurations`": [{`"name`": `"ipconfig1`", `"properties`": {`"subnet`": {`"id`": `"$IdentitySubnetId`"}}}]}}" | Set-Content -NoNewline -Path $IdentityNicBodyFile
+
+Write-Host "-- PUT network interface (de soporte) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/networkInterfaces/$IdentityNic`?api-version=$ApiNetwork" --body "@$IdentityNicBodyFile"
+
+$IdentityNicId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/networkInterfaces/$IdentityNic"
+"{`"location`": `"$Location`", `"identity`": {`"type`": `"SystemAssigned`"}, `"properties`": {`"hardwareProfile`": {`"vmSize`": `"Standard_B1s`"}, `"storageProfile`": {`"imageReference`": {`"publisher`": `"Canonical`", `"offer`": `"0001-com-ubuntu-server-jammy`", `"sku`": `"22_04-lts-gen2`", `"version`": `"latest`"}}, `"osProfile`": {`"computerName`": `"smoketestidvm`", `"adminUsername`": `"azureuser`", `"adminPassword`": `"P@ssw0rd1234!`"}, `"networkProfile`": {`"networkInterfaces`": [{`"id`": `"$IdentityNicId`"}]}}}" | Set-Content -NoNewline -Path $IdentityVmBodyFile
+
+Write-Host "-- PUT virtual machine con identity.type=SystemAssigned (async, 202; principalId/tenantId deterministas) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Compute/virtualMachines/$IdentityVm`?api-version=$ApiCompute" --body "@$IdentityVmBodyFile"
+
+Write-Host "-- GET virtual machine (confirma identity.principalId/tenantId no vacios) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Compute/virtualMachines/$IdentityVm`?api-version=$ApiCompute"
+
+Write-Host "-- DELETE virtual machine (de soporte) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Compute/virtualMachines/$IdentityVm`?api-version=$ApiCompute"
+
+Write-Host "-- DELETE network interface (de soporte) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/networkInterfaces/$IdentityNic`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE subnet (de soporte) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/virtualNetworks/$IdentityVnet/subnets/$IdentitySubnet`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE virtual network (de soporte) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Network/virtualNetworks/$IdentityVnet`?api-version=$ApiNetwork"
+
+Write-Host "-- DELETE user-assigned managed identity --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$Identity`?api-version=$ApiManagedIdentity"
+
+Remove-Item -Force $IdentityBodyFile, $IdentityVnetBodyFile, $IdentitySubnetBodyFile, $IdentityNicBodyFile, $IdentityVmBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

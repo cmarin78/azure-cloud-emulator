@@ -221,6 +221,57 @@ func TestVirtualMachineLifecycle(t *testing.T) {
 	}
 }
 
+// TestVirtualMachineSystemAssignedIdentity cubre Phase 16: cuando el
+// request trae identity.type "SystemAssigned" (o cualquier valor distinto
+// de "None"), la VM debe devolver un principalId/tenantId deterministas
+// (no vacíos), y un segundo PUT idéntico debe devolver los mismos valores
+// (mismo seed = mismo fakeGUID), mismo comportamiento que
+// aks.TestManagedClusterLifecycle ya verifica para AKS.
+func TestVirtualMachineSystemAssignedIdentity(t *testing.T) {
+	srv, _ := newTestServer(t)
+	nicID := setupNIC(t, srv)
+	base := srv.URL + "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/myvm"
+
+	body := vmRequestBody(nicID)
+	body["identity"] = map[string]any{"type": "SystemAssigned"}
+
+	var vm VirtualMachine
+	status := testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(base), body, &vm)
+	if status != http.StatusAccepted {
+		t.Fatalf("put vm with identity: status=%d", status)
+	}
+	if vm.Identity == nil || vm.Identity.Type != "SystemAssigned" || vm.Identity.PrincipalID == "" || vm.Identity.TenantID == "" {
+		t.Fatalf("expected a populated SystemAssigned identity, got %+v", vm.Identity)
+	}
+
+	var again VirtualMachine
+	status = testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(base), body, &again)
+	if status != http.StatusAccepted {
+		t.Fatalf("put vm again: status=%d", status)
+	}
+	if again.Identity.PrincipalID != vm.Identity.PrincipalID || again.Identity.TenantID != vm.Identity.TenantID {
+		t.Fatalf("expected deterministic identity across PUTs, got %+v vs %+v", vm.Identity, again.Identity)
+	}
+}
+
+// TestVirtualMachineWithoutIdentityOmitsIdentity cubre el caso por defecto
+// (sin bloque "identity" en el request): el campo debe quedar nil/omitido,
+// igual que aks.ManagedCluster cuando req.Identity es nil.
+func TestVirtualMachineWithoutIdentityOmitsIdentity(t *testing.T) {
+	srv, _ := newTestServer(t)
+	nicID := setupNIC(t, srv)
+	base := srv.URL + "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/myvm"
+
+	var vm VirtualMachine
+	status := testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(base), vmRequestBody(nicID), &vm)
+	if status != http.StatusAccepted {
+		t.Fatalf("put vm: status=%d", status)
+	}
+	if vm.Identity != nil {
+		t.Fatalf("expected nil identity when not requested, got %+v", vm.Identity)
+	}
+}
+
 func TestVirtualMachineRejectsInvalidNICReference(t *testing.T) {
 	srv, _ := newTestServer(t)
 	base := srv.URL + "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/myvm"

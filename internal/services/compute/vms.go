@@ -3,6 +3,7 @@ package compute
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"net/http"
 	"strings"
 
@@ -21,7 +22,18 @@ type VirtualMachine struct {
 	Type       string                   `json:"type"`
 	Location   string                   `json:"location"`
 	Tags       map[string]string        `json:"tags,omitempty"`
+	Identity   *Identity                `json:"identity,omitempty"`
 	Properties VirtualMachineProperties `json:"properties"`
+}
+
+// Identity replica el bloque "identity" estándar de ARM (Phase 16, mismo
+// shape que aks.Identity/appservice.Identity — cada paquete mantiene su
+// propia copia local en vez de compartir un tipo central, igual convención
+// que fakeHexSuffix/fakeGUID más abajo).
+type Identity struct {
+	Type        string `json:"type"`
+	PrincipalID string `json:"principalId,omitempty"`
+	TenantID    string `json:"tenantId,omitempty"`
 }
 
 type VirtualMachineProperties struct {
@@ -84,6 +96,7 @@ type VMStatus struct {
 type virtualMachineRequest struct {
 	Location   string            `json:"location"`
 	Tags       map[string]string `json:"tags,omitempty"`
+	Identity   *Identity         `json:"identity,omitempty"`
 	Properties struct {
 		HardwareProfile HardwareProfile `json:"hardwareProfile"`
 		StorageProfile  StorageProfile  `json:"storageProfile"`
@@ -117,6 +130,22 @@ func vmKey(subID, rg, name string) string {
 
 func vmID(subID, rg, name string) string {
 	return fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachines/%s", subID, rg, name)
+}
+
+// fakeHexSuffix/fakeGUID derivan valores deterministas (mismo seed -> mismo
+// resultado) a partir del ID completo del recurso, mismo patrón que
+// aks.fakeHexSuffix/fakeGUID (Phase 13) y network.fakePublicIP — así
+// principalId/tenantId no cambian entre GETs sucesivos sin necesidad de
+// persistir nada extra más allá del propio Identity ya guardado en el VM.
+func fakeHexSuffix(seed string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(seed))
+	return h.Sum32()
+}
+
+func fakeGUID(seed string) string {
+	sum := fakeHexSuffix(seed)
+	return fmt.Sprintf("%08x-0000-0000-0000-%012x", sum, uint64(sum)*2654435761)
 }
 
 func runningStatus() InstanceView {
@@ -215,12 +244,23 @@ func (s *Service) putVirtualMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	id := vmID(subID, rg, name)
+	var identity *Identity
+	if req.Identity != nil {
+		identity = &Identity{Type: req.Identity.Type}
+		if req.Identity.Type != "" && req.Identity.Type != "None" {
+			identity.PrincipalID = fakeGUID(id + "-principal")
+			identity.TenantID = fakeGUID(id + "-tenant")
+		}
+	}
+
 	vm := VirtualMachine{
-		ID:       vmID(subID, rg, name),
+		ID:       id,
 		Name:     name,
 		Type:     "Microsoft.Compute/virtualMachines",
 		Location: req.Location,
 		Tags:     req.Tags,
+		Identity: identity,
 		Properties: VirtualMachineProperties{
 			ProvisioningState: "Succeeded",
 			HardwareProfile:   req.Properties.HardwareProfile,
@@ -245,8 +285,8 @@ func (s *Service) putVirtualMachine(w http.ResponseWriter, r *http.Request) {
 	// Patrón create-async: la operación ya está "Succeeded" pero igual se
 	// expone Azure-AsyncOperation/Location para que el polling de az
 	// CLI/Terraform funcione, y se responde 202 con el cuerpo del recurso.
-	id := s.ops.Succeeded()
-	url := server.AsyncOperationURL(r, subID, computeProvider, req.Location, id, apiVersion)
+	opID := s.ops.Succeeded()
+	url := server.AsyncOperationURL(r, subID, computeProvider, req.Location, opID, apiVersion)
 	w.Header().Set("Azure-AsyncOperation", url)
 	w.Header().Set("Location", url)
 	_ = found // el status code de creación real de Azure para VM PUT es 200/201 vía polling; aquí siempre 202 (ver comentario arriba)

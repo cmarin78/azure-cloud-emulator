@@ -197,6 +197,11 @@ variable "role_assignment_rg_name" {
   default = "tfsmoke33333333-3333-3333-3333-333333333333"
 }
 
+variable "user_assigned_identity" {
+  type    = string
+  default = "tfsmokeidentity"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -849,6 +854,24 @@ resource "null_resource" "role_assignment_rg" {
   }
 }
 
+# Fase 16 (Managed Identities): user-assigned identity (ARM, síncrono) --
+# mismo patrón null_resource + local-exec del resto del archivo. El emulador
+# deriva tenantId/principalId/clientId de forma determinista (ver
+# internal/services/managedidentity/identities.go), así que no hace falta
+# capturar nada de la respuesta del PUT para usarlo en otro recurso de este
+# archivo.
+resource "null_resource" "user_assigned_identity" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    identity = var.user_assigned_identity
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${var.user_assigned_identity}?api-version=2023-01-31' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\"}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -1089,6 +1112,12 @@ data "http" "role_assignments_sub_list" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
 }
 
+# Fase 16 (Managed Identities): verificación de lectura, mismo patrón.
+data "http" "user_assigned_identity" {
+  depends_on = [null_resource.user_assigned_identity]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${var.user_assigned_identity}?api-version=2023-01-31"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -1255,4 +1284,8 @@ output "role_assignment_rg_response" {
 
 output "role_assignments_sub_list_response" {
   value = jsondecode(data.http.role_assignments_sub_list.response_body)
+}
+
+output "user_assigned_identity_response" {
+  value = jsondecode(data.http.user_assigned_identity.response_body)
 }

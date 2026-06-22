@@ -185,7 +185,7 @@ LOCATION="eastus"
 echo "-- PUT virtual network --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}?api-version=${API_NETWORK}" \
-  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"addressSpace\": {\"addressPrefixes\": [\"10.0.0.0/16\"]}}}"
+  --body "{\"location\": \"eastus\", \"properties\": {\"addressSpace\": {\"addressPrefixes\": [\"10.0.0.0/16\"]}}}"
 
 echo "-- GET virtual network --"
 az rest --method get \
@@ -205,7 +205,7 @@ SUBNET_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Networ
 echo "-- PUT network interface (asigna IP privada automáticamente) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}?api-version=${API_NETWORK}" \
-  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"ipConfigurations\": [{\"name\": \"ipconfig1\", \"properties\": {\"subnet\": {\"id\": \"${SUBNET_ID}\"}}}]}}"
+  --body "{\"location\": \"eastus\", \"properties\": {\"ipConfigurations\": [{\"name\": \"ipconfig1\", \"properties\": {\"subnet\": {\"id\": \"${SUBNET_ID}\"}}}]}}"
 
 echo "-- GET network interface --"
 az rest --method get \
@@ -216,7 +216,7 @@ NIC_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/n
 echo "-- PUT managed disk --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/disks/${DISK}?api-version=${API_COMPUTE}" \
-  --body "{\"location\": \"${LOCATION}\", \"sku\": {\"name\": \"Standard_LRS\"}, \"properties\": {\"diskSizeGB\": 32, \"creationData\": {\"createOption\": \"Empty\"}}}"
+  --body "{\"location\": \"eastus\", \"sku\": {\"name\": \"Standard_LRS\"}, \"properties\": {\"diskSizeGB\": 32, \"creationData\": {\"createOption\": \"Empty\"}}}"
 
 echo "-- GET managed disk --"
 az rest --method get \
@@ -224,12 +224,12 @@ az rest --method get \
 
 echo "-- LIST imágenes del catálogo estático (Canonical Ubuntu 22.04) --"
 az rest --method get \
-  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Compute/locations/${LOCATION}/publishers/Canonical/artifacttypes/vmimage/offers/0001-com-ubuntu-server-jammy/skus/22_04-lts-gen2/versions?api-version=${API_COMPUTE_IMAGES}"
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Compute/locations/eastus/publishers/Canonical/artifacttypes/vmimage/offers/0001-com-ubuntu-server-jammy/skus/22_04-lts-gen2/versions?api-version=${API_COMPUTE_IMAGES}"
 
 echo "-- PUT virtual machine (async, 202 con cuerpo) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}?api-version=${API_COMPUTE}" \
-  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"hardwareProfile\": {\"vmSize\": \"Standard_B1s\"}, \"storageProfile\": {\"imageReference\": {\"publisher\": \"Canonical\", \"offer\": \"0001-com-ubuntu-server-jammy\", \"sku\": \"22_04-lts-gen2\", \"version\": \"latest\"}}, \"osProfile\": {\"computerName\": \"smoketestvm\", \"adminUsername\": \"azureuser\", \"adminPassword\": \"P@ssw0rd1234!\"}, \"networkProfile\": {\"networkInterfaces\": [{\"id\": \"${NIC_ID}\"}]}}}"
+  --body "{\"location\": \"eastus\", \"properties\": {\"hardwareProfile\": {\"vmSize\": \"Standard_B1s\"}, \"storageProfile\": {\"imageReference\": {\"publisher\": \"Canonical\", \"offer\": \"0001-com-ubuntu-server-jammy\", \"sku\": \"22_04-lts-gen2\", \"version\": \"latest\"}}, \"osProfile\": {\"computerName\": \"smoketestvm\", \"adminUsername\": \"azureuser\", \"adminPassword\": \"P@ssw0rd1234!\"}, \"networkProfile\": {\"networkInterfaces\": [{\"id\": \"${NIC_ID}\"}]}}}"
 
 echo "-- GET virtual machine (la respuesta no debe incluir adminPassword) --"
 az rest --method get \
@@ -270,7 +270,7 @@ TENANT_ID="00000000-0000-0000-0000-000000000000"
 echo "-- PUT key vault (ARM, sync) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${VAULT}?api-version=${API_KEYVAULT}" \
-  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"sku\": {\"family\": \"A\", \"name\": \"standard\"}, \"tenantId\": \"${TENANT_ID}\"}}"
+  --body "{\"location\": \"eastus\", \"properties\": {\"sku\": {\"family\": \"A\", \"name\": \"standard\"}, \"tenantId\": \"${TENANT_ID}\"}}"
 
 echo "-- GET key vault --"
 az rest --method get \
@@ -344,7 +344,7 @@ SUBSCRIPTION="smoketest-sub"
 echo "-- PUT Service Bus namespace (async, 202) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${NAMESPACE}?api-version=${API_SERVICEBUS}" \
-  --body "{\"location\": \"${LOCATION}\"}"
+  --body "{\"location\": \"eastus\"}"
 
 echo "-- GET Service Bus namespace --"
 az rest --method get \
@@ -414,7 +414,7 @@ COSMOS_CONTAINER="smoketestcontainer"
 echo "-- PUT cuenta de Cosmos DB (async, 202) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS_ACCOUNT}?api-version=${API_COSMOSDB}" \
-  --body "{\"location\": \"${LOCATION}\"}"
+  --body "{\"location\": \"eastus\"}"
 
 echo "-- GET cuenta de Cosmos DB --"
 az rest --method get \
@@ -468,7 +468,7 @@ METRIC_ALERT="smoketestmetricalert"
 echo "-- PUT Log Analytics workspace (ARM, sync) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/${WORKSPACE}?api-version=${API_MONITOR}" \
-  --body "{\"location\": \"${LOCATION}\"}"
+  --body "{\"location\": \"eastus\"}"
 
 echo "-- GET Log Analytics workspace --"
 az rest --method get \
@@ -534,7 +534,7 @@ SITE="smoketestsite"
 echo "-- PUT App Service Plan (ARM, sync) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${PLAN}?api-version=${API_APPSERVICE}" \
-  --body "{\"location\": \"${LOCATION}\", \"kind\": \"linux\", \"sku\": {\"name\": \"B1\", \"tier\": \"Basic\"}}"
+  --body "{\"location\": \"eastus\", \"kind\": \"linux\", \"sku\": {\"name\": \"B1\", \"tier\": \"Basic\"}}"
 
 echo "-- GET App Service Plan --"
 az rest --method get \
@@ -549,7 +549,7 @@ PLAN_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serv
 echo "-- PUT Web App (ARM, sync) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${SITE}?api-version=${API_APPSERVICE}" \
-  --body "{\"location\": \"${LOCATION}\", \"kind\": \"app,linux\", \"properties\": {\"serverFarmId\": \"${PLAN_ID}\", \"siteConfig\": {\"linuxFxVersion\": \"DOCKER|nginx:latest\"}}}"
+  --body "{\"location\": \"eastus\", \"kind\": \"app,linux\", \"properties\": {\"serverFarmId\": \"${PLAN_ID}\", \"siteConfig\": {\"linuxFxVersion\": \"DOCKER|nginx:latest\"}}}"
 
 echo "-- GET Web App --"
 az rest --method get \
@@ -597,7 +597,7 @@ DNS_ZONE="smoketest.internal"
 echo "-- PUT network security group (ARM, sync) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}?api-version=${API_NETWORK}" \
-  --body "{\"location\": \"${LOCATION}\"}"
+  --body "{\"location\": \"eastus\"}"
 
 echo "-- GET network security group --"
 az rest --method get \
@@ -615,7 +615,7 @@ az rest --method get \
 echo "-- PUT public IP address (ARM, sync, IP determinista) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/publicIPAddresses/${PIP}?api-version=${API_NETWORK}" \
-  --body "{\"location\": \"${LOCATION}\"}"
+  --body "{\"location\": \"eastus\"}"
 
 echo "-- GET public IP address --"
 az rest --method get \
@@ -627,7 +627,7 @@ LB_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/lo
 echo "-- PUT load balancer (ARM, sync) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/loadBalancers/${LB}?api-version=${API_NETWORK}" \
-  --body "{\"location\": \"${LOCATION}\", \"properties\": {\"frontendIPConfigurations\": [{\"name\": \"frontend1\", \"properties\": {\"publicIPAddress\": {\"id\": \"${PIP_ID}\"}}}], \"backendAddressPools\": [{\"name\": \"backend1\"}], \"loadBalancingRules\": [{\"name\": \"rule1\", \"properties\": {\"frontendIPConfiguration\": {\"id\": \"${LB_ID}/frontendIPConfigurations/frontend1\"}, \"backendAddressPool\": {\"id\": \"${LB_ID}/backendAddressPools/backend1\"}, \"protocol\": \"Tcp\", \"frontendPort\": 80, \"backendPort\": 8080}}]}}"
+  --body "{\"location\": \"eastus\", \"properties\": {\"frontendIPConfigurations\": [{\"name\": \"frontend1\", \"properties\": {\"publicIPAddress\": {\"id\": \"${PIP_ID}\"}}}], \"backendAddressPools\": [{\"name\": \"backend1\"}], \"loadBalancingRules\": [{\"name\": \"rule1\", \"properties\": {\"frontendIPConfiguration\": {\"id\": \"${LB_ID}/frontendIPConfigurations/frontend1\"}, \"backendAddressPool\": {\"id\": \"${LB_ID}/backendAddressPools/backend1\"}, \"protocol\": \"Tcp\", \"frontendPort\": 80, \"backendPort\": 8080}}]}}"
 
 echo "-- GET load balancer --"
 az rest --method get \
@@ -636,7 +636,7 @@ az rest --method get \
 echo "-- PUT route table (ARM, sync) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/routeTables/${RT}?api-version=${API_NETWORK}" \
-  --body "{\"location\": \"${LOCATION}\"}"
+  --body "{\"location\": \"eastus\"}"
 
 echo "-- PUT route (sub-recurso) --"
 az rest --method put \
@@ -692,7 +692,7 @@ NODE_POOL="userpool"
 echo "-- PUT AKS managed cluster (async, 202 con cuerpo) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER}?api-version=${API_AKS}" \
-  --body "{\"location\": \"${LOCATION}\", \"identity\": {\"type\": \"SystemAssigned\"}, \"properties\": {\"dnsPrefix\": \"${CLUSTER}\"}}"
+  --body "{\"location\": \"eastus\", \"identity\": {\"type\": \"SystemAssigned\"}, \"properties\": {\"dnsPrefix\": \"${CLUSTER}\"}}"
 
 echo "-- GET AKS managed cluster (debe traer el pool 'default' sintetizado) --"
 az rest --method get \
@@ -737,12 +737,12 @@ FUNC_PLAN_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web
 echo "-- PUT App Service Plan para Functions (ARM, sync) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${FUNC_PLAN}?api-version=${API_APPSERVICE}" \
-  --body "{\"location\": \"${LOCATION}\", \"sku\": {\"name\": \"Y1\", \"tier\": \"Dynamic\"}}"
+  --body "{\"location\": \"eastus\", \"sku\": {\"name\": \"Y1\", \"tier\": \"Dynamic\"}}"
 
 echo "-- PUT Function App (Microsoft.Web/sites con kind=functionapp; cubierto por appservice) --"
 az rest --method put \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FUNC_APP}?api-version=${API_FUNCTIONS}" \
-  --body "{\"location\": \"${LOCATION}\", \"kind\": \"functionapp,linux\", \"properties\": {\"serverFarmId\": \"${FUNC_PLAN_ID}\"}}"
+  --body "{\"location\": \"eastus\", \"kind\": \"functionapp,linux\", \"properties\": {\"serverFarmId\": \"${FUNC_PLAN_ID}\"}}"
 
 echo "-- PUT function definition (sub-recurso Microsoft.Web/sites/functions) --"
 az rest --method put \
@@ -862,6 +862,75 @@ az rest --method delete \
 echo "-- DELETE application --"
 az rest --method delete \
   --url "${ENDPOINT}/v1.0/applications/${APP_OBJECT_ID}"
+
+API_MANAGED_IDENTITY="2023-01-31"
+IDENTITY="smoketestidentity"
+
+echo "-- PUT user-assigned managed identity (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${IDENTITY}?api-version=${API_MANAGED_IDENTITY}" \
+  --body "{\"location\": \"eastus\"}"
+
+echo "-- GET user-assigned managed identity (tenantId/principalId/clientId deterministas) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${IDENTITY}?api-version=${API_MANAGED_IDENTITY}"
+
+echo "-- LIST user-assigned managed identities --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities?api-version=${API_MANAGED_IDENTITY}"
+
+IDENTITY_VNET="smoketest-identity-vnet"
+IDENTITY_SUBNET="default"
+IDENTITY_NIC="smoketest-identity-nic"
+IDENTITY_VM="smoketest-identity-vm"
+
+echo "-- PUT virtual network (de soporte, para una VM con identidad) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${IDENTITY_VNET}?api-version=${API_NETWORK}" \
+  --body "{\"location\": \"eastus\", \"properties\": {\"addressSpace\": {\"addressPrefixes\": [\"10.1.0.0/16\"]}}}"
+
+echo "-- PUT subnet (de soporte) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${IDENTITY_VNET}/subnets/${IDENTITY_SUBNET}?api-version=${API_NETWORK}" \
+  --body "{\"properties\": {\"addressPrefix\": \"10.1.1.0/24\"}}"
+
+IDENTITY_SUBNET_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${IDENTITY_VNET}/subnets/${IDENTITY_SUBNET}"
+
+echo "-- PUT network interface (de soporte) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${IDENTITY_NIC}?api-version=${API_NETWORK}" \
+  --body "{\"location\": \"eastus\", \"properties\": {\"ipConfigurations\": [{\"name\": \"ipconfig1\", \"properties\": {\"subnet\": {\"id\": \"${IDENTITY_SUBNET_ID}\"}}}]}}"
+
+IDENTITY_NIC_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${IDENTITY_NIC}"
+
+echo "-- PUT virtual machine con identity.type=SystemAssigned (async, 202; principalId/tenantId deterministas) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${IDENTITY_VM}?api-version=${API_COMPUTE}" \
+  --body "{\"location\": \"eastus\", \"identity\": {\"type\": \"SystemAssigned\"}, \"properties\": {\"hardwareProfile\": {\"vmSize\": \"Standard_B1s\"}, \"storageProfile\": {\"imageReference\": {\"publisher\": \"Canonical\", \"offer\": \"0001-com-ubuntu-server-jammy\", \"sku\": \"22_04-lts-gen2\", \"version\": \"latest\"}}, \"osProfile\": {\"computerName\": \"smoketestidvm\", \"adminUsername\": \"azureuser\", \"adminPassword\": \"P@ssw0rd1234!\"}, \"networkProfile\": {\"networkInterfaces\": [{\"id\": \"${IDENTITY_NIC_ID}\"}]}}}"
+
+echo "-- GET virtual machine (confirma identity.principalId/tenantId no vacios) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${IDENTITY_VM}?api-version=${API_COMPUTE}"
+
+echo "-- DELETE virtual machine (de soporte) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${IDENTITY_VM}?api-version=${API_COMPUTE}"
+
+echo "-- DELETE network interface (de soporte) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${IDENTITY_NIC}?api-version=${API_NETWORK}"
+
+echo "-- DELETE subnet (de soporte) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${IDENTITY_VNET}/subnets/${IDENTITY_SUBNET}?api-version=${API_NETWORK}"
+
+echo "-- DELETE virtual network (de soporte) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${IDENTITY_VNET}?api-version=${API_NETWORK}"
+
+echo "-- DELETE user-assigned managed identity --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${IDENTITY}?api-version=${API_MANAGED_IDENTITY}"
 
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \

@@ -150,6 +150,9 @@ var registeredNamespaces = []Provider{
 		{ResourceType: "roleDefinitions", Locations: []string{"global"}},
 		{ResourceType: "roleAssignments", Locations: []string{"global"}},
 	}},
+	{Namespace: "Microsoft.ManagedIdentity", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "userAssignedIdentities", Locations: []string{"eastus", "westus2"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {
