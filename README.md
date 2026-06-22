@@ -18,10 +18,11 @@ their endpoints to `localhost`.
 
 ## Current status
 
-All 16 core phases below are complete, plus Phase 20 (real Action Group
+All 17 core phases below are complete, plus Phase 20 (real Action Group
 webhook delivery). See [ROADMAP.md](ROADMAP.md) for what's planned next
-(the rest of the behavioral/real-delivery layer inspired by
-gcp-emulator's own Phase 11).
+(API Management, ARM/Bicep deployments, and the rest of the
+behavioral/real-delivery layer inspired by gcp-emulator's own
+Phase 11).
 
 | Phase | Area | What's implemented |
 |---|---|---|
@@ -41,6 +42,7 @@ gcp-emulator's own Phase 11).
 | 14 | Functions | Function definitions, `syncfunctiontriggers`, `host/default/listkeys` — reuses Phase 11's App Service site, no new resource type needed |
 | 15 | Entra ID & RBAC | App registrations, service principals, custom role definitions, role assignments (scope-isolated subscription/resource-group storage) — no real directory or authorization evaluation |
 | 16 | Managed Identities | User-assigned identities (`Microsoft.ManagedIdentity/userAssignedIdentities`, ARM CRUD, sync), `identity.type=SystemAssigned` sub-object on App Service sites, VMs, and AKS clusters — deterministic fake `tenantId`/`principalId`/`clientId` |
+| 17 | Eventing | Event Grid topics + event subscriptions (ARM CRUD, sync; real webhook delivery on publish) and publish (data-plane); Event Hubs namespaces (ARM CRUD, async), event hubs + consumer groups (ARM CRUD, sync), send/receive (data-plane, simplified) |
 | 20 | Action Groups: real webhook delivery | `POST .../actionGroups/{name}/createNotifications` dispatches a real HTTP POST to each `webhookReceivers` entry; result recorded via `lastNotificationTime`/`lastNotificationStatus` (emulator-only fields) |
 
 ### Feature matrix (detail)
@@ -115,6 +117,16 @@ gcp-emulator's own Phase 11).
   Service sites (Phase 11, including Function Apps via Phase 14),
   virtual machines (Phase 4), and AKS managed clusters (Phase 13) —
   each deterministic per resource, no real directory behind either.
+- **Eventing**: ✅ Event Grid topics (ARM CRUD, sync) with a data-plane
+  publish endpoint at `{topic}.eventgrid/api/events`, ✅ event
+  subscriptions (ARM CRUD, sync; webhook `endpointType`) — publish
+  fans out to every subscription and delivers a **real** HTTP POST to
+  each webhook destination, recording the outcome via emulator-only
+  `lastDeliveryStatus`/`lastDeliveryTime` fields, no retry/
+  dead-lettering; ✅ Event Hubs namespaces (ARM CRUD, async), ✅ event
+  hubs + consumer groups (ARM CRUD, sync), ✅ send/receive (data-plane,
+  simplified flat offset-ordered log — no real partitioning/
+  checkpointing).
 - **Action Groups real webhook delivery (Phase 20)**: ✅
   `POST .../actionGroups/{name}/createNotifications` sends a real HTTP
   POST (Azure common-alert-schema-shaped JSON body) to every
@@ -147,6 +159,9 @@ internal/services/armmeta/      fake ARM metadata document (/metadata/endpoints)
 internal/services/aadtoken/     fake Azure AD token issuer (/login/{tenant}/oauth2/v2.0/token) accepting any client_id/secret
 internal/services/graph/        Microsoft Graph stub: applications + servicePrincipals (POST/GET/$filter auto-discovery) so azurerm can resolve a service principal's object ID
 internal/services/authorization/  Microsoft.Authorization/roleDefinitions + roleAssignments (ARM CRUD, sync, scope-isolated subscription/resource-group storage)
+internal/services/managedidentity/  Microsoft.ManagedIdentity/userAssignedIdentities (ARM CRUD, sync)
+internal/services/eventgrid/    Microsoft.EventGrid/topics + eventSubscriptions (ARM CRUD, sync) + publish (path-style {topic}.eventgrid/ data-plane, real webhook delivery)
+internal/services/eventhub/     Microsoft.EventHub/namespaces (ARM CRUD, async) + eventhubs/consumergroups (ARM CRUD, sync) + send/receive (path-style {namespace}.eventhub/ data-plane)
 internal/devtls/                self-signed TLS certificate generation/caching for the optional -tls flag
 web/console/                     minimal vanilla-JS web console (no build step), served by the binary itself
 docs/                            banner and other documentation assets
@@ -340,6 +355,13 @@ This exercises, end to end against a running emulator instance:
   confirming a subscription-scope list never includes a
   resource-group-scope assignment; cleanup deletes of the role
   assignments, role definition, service principal, and application.
+- **Eventing**: Event Grid topic create/get; event subscription put
+  (webhook destination pointed at an unreachable placeholder URL) /get;
+  publish (data-plane) followed by a GET confirming a recorded
+  delivery attempt (`lastDeliveryStatus`/`lastDeliveryTime`); Event
+  Hubs namespace create (async)/get; event hub put/get; consumer group
+  put/get; send (data-plane) followed by receive via both the direct
+  `{hub}/messages` path and the consumer-group path; cleanup deletes.
 
 ### Terraform (generic `http` provider)
 
@@ -367,10 +389,17 @@ managed cluster + agent pool; a Functions App Service Plan + Function
 App + function definition (plus a `syncfunctiontriggers` call); and
 Entra ID & RBAC (an application, a service principal, a custom role
 definition, and role assignments at both subscription and
-resource-group scope). It then reads each one back via `data "http"`
-blocks and exposes the parsed JSON as outputs — including a
+resource-group scope); a user-assigned managed identity; and Eventing
+(an Event Grid topic + event subscription with a webhook destination
++ publish, and an Event Hubs namespace + event hub + consumer group +
+send). It then reads each one back via `data "http"` blocks and
+exposes the parsed JSON as outputs — including a
 `role_assignments_sub_list` data source confirming the
-subscription-scope list excludes the resource-group-scope assignment.
+subscription-scope list excludes the resource-group-scope assignment,
+and an `eh_receive_response` data source confirming a roundtrip
+send/receive on the event hub. Confirmed via a full `apply`/`destroy`
+cycle: 55 resources applied and destroyed cleanly against a live
+emulator instance.
 
 ### Terraform with the real `azurerm` provider
 

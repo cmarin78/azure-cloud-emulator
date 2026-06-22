@@ -932,6 +932,96 @@ echo "-- DELETE user-assigned managed identity --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${IDENTITY}?api-version=${API_MANAGED_IDENTITY}"
 
+API_EVENTGRID="2022-06-15"
+API_EVENTHUB="2021-11-01"
+EG_TOPIC="smoketest-egtopic"
+EG_SUB="smoketest-egsub"
+EH_NAMESPACE="smoketesteh"
+EH_HUB="smoketest-hub"
+EH_CG="smoketest-cg"
+
+echo "-- PUT Event Grid topic (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EG_TOPIC}?api-version=${API_EVENTGRID}" \
+  --body "{\"location\": \"eastus\"}"
+
+echo "-- GET Event Grid topic --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EG_TOPIC}?api-version=${API_EVENTGRID}"
+
+echo "-- LIST Event Grid topics --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics?api-version=${API_EVENTGRID}"
+
+echo "-- PUT event subscription (extension resource, webhook hacia un placeholder) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EG_TOPIC}/providers/Microsoft.EventGrid/eventSubscriptions/${EG_SUB}?api-version=${API_EVENTGRID}" \
+  --body "{\"properties\": {\"destination\": {\"endpointType\": \"WebHook\", \"properties\": {\"endpointUrl\": \"http://localhost:10999/webhook\"}}}}"
+
+echo "-- POST publish evento al topic (data plane, dispara el webhook de forma asincrona) --"
+curl -s -X POST "${ENDPOINT}/${EG_TOPIC}.eventgrid/api/events" \
+  -H "Content-Type: application/json" \
+  -d '[{"id": "1", "eventType": "Smoketest.Event", "subject": "/smoketest", "data": {"x": 1}, "eventTime": "2026-06-22T00:00:00Z", "dataVersion": "1.0"}]'
+echo
+
+echo "-- Espera breve para que el despacho asincrono del webhook termine --"
+sleep 1
+
+echo "-- GET event subscription (confirma lastDeliveryStatus tras el despacho real) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EG_TOPIC}/providers/Microsoft.EventGrid/eventSubscriptions/${EG_SUB}?api-version=${API_EVENTGRID}"
+
+echo "-- DELETE event subscription --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EG_TOPIC}/providers/Microsoft.EventGrid/eventSubscriptions/${EG_SUB}?api-version=${API_EVENTGRID}"
+
+echo "-- DELETE Event Grid topic --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EG_TOPIC}?api-version=${API_EVENTGRID}"
+
+echo "-- PUT Event Hubs namespace (async, 202) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventHub/namespaces/${EH_NAMESPACE}?api-version=${API_EVENTHUB}" \
+  --body "{\"location\": \"eastus\", \"sku\": {\"name\": \"Standard\"}}"
+
+echo "-- GET Event Hubs namespace --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventHub/namespaces/${EH_NAMESPACE}?api-version=${API_EVENTHUB}"
+
+echo "-- PUT event hub (sub-recurso, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventHub/namespaces/${EH_NAMESPACE}/eventhubs/${EH_HUB}?api-version=${API_EVENTHUB}" \
+  --body "{}"
+
+echo "-- PUT consumer group (sub-sub-recurso, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventHub/namespaces/${EH_NAMESPACE}/eventhubs/${EH_HUB}/consumergroups/${EH_CG}?api-version=${API_EVENTHUB}" \
+  --body "{}"
+
+echo "-- POST enviar evento (data plane) --"
+curl -s -X POST "${ENDPOINT}/${EH_NAMESPACE}.eventhub/${EH_HUB}/messages" -d "hola desde Event Hubs"
+echo
+
+echo "-- GET recibir eventos (offset por defecto) --"
+curl -s "${ENDPOINT}/${EH_NAMESPACE}.eventhub/${EH_HUB}/messages"
+echo
+
+echo "-- GET recibir eventos via consumer group --"
+curl -s "${ENDPOINT}/${EH_NAMESPACE}.eventhub/${EH_HUB}/consumergroups/${EH_CG}/messages"
+echo
+
+echo "-- DELETE consumer group --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventHub/namespaces/${EH_NAMESPACE}/eventhubs/${EH_HUB}/consumergroups/${EH_CG}?api-version=${API_EVENTHUB}"
+
+echo "-- DELETE event hub --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventHub/namespaces/${EH_NAMESPACE}/eventhubs/${EH_HUB}?api-version=${API_EVENTHUB}"
+
+echo "-- DELETE Event Hubs namespace --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventHub/namespaces/${EH_NAMESPACE}?api-version=${API_EVENTHUB}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

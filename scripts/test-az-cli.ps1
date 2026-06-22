@@ -847,6 +847,82 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $IdentityBodyFile, $IdentityVnetBodyFile, $IdentitySubnetBodyFile, $IdentityNicBodyFile, $IdentityVmBodyFile -ErrorAction SilentlyContinue
 
+$ApiEventGrid = "2022-06-15"
+$ApiEventHub = "2021-11-01"
+$EgTopic = "smoketest-egtopic"
+$EgSub = "smoketest-egsub"
+$EhNamespace = "smoketesteh"
+$EhHub = "smoketest-hub"
+$EhCg = "smoketest-cg"
+
+$EgTopicBodyFile = New-TemporaryFile
+$EgSubBodyFile = New-TemporaryFile
+$EhNsBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $EgTopicBodyFile
+'{"properties": {"destination": {"endpointType": "WebHook", "properties": {"endpointUrl": "http://localhost:10999/webhook"}}}}' | Set-Content -NoNewline -Path $EgSubBodyFile
+"{`"location`": `"$Location`", `"sku`": {`"name`": `"Standard`"}}" | Set-Content -NoNewline -Path $EhNsBodyFile
+
+Write-Host "-- PUT Event Grid topic (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventGrid/topics/$EgTopic`?api-version=$ApiEventGrid" --body "@$EgTopicBodyFile"
+
+Write-Host "-- GET Event Grid topic --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventGrid/topics/$EgTopic`?api-version=$ApiEventGrid"
+
+Write-Host "-- LIST Event Grid topics --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventGrid/topics`?api-version=$ApiEventGrid"
+
+Write-Host "-- PUT event subscription (extension resource, webhook real a http://localhost:10999/webhook) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventGrid/topics/$EgTopic/providers/Microsoft.EventGrid/eventSubscriptions/$EgSub`?api-version=$ApiEventGrid" --body "@$EgSubBodyFile"
+
+Write-Host "-- POST publish evento al topic (data plane, dispara el webhook de forma asíncrona) --"
+Invoke-RestMethod -Method Post -Uri "$Endpoint/$EgTopic.eventgrid/api/events" -ContentType "application/json" -Body '[{"id": "1", "eventType": "Smoketest.Event", "subject": "/smoketest", "data": {"x": 1}, "eventTime": "2026-06-22T00:00:00Z", "dataVersion": "1.0"}]' | ConvertTo-Json -Compress
+
+Write-Host "-- Espera breve para que el despacho asíncrono del webhook termine --"
+Start-Sleep -Seconds 1
+
+Write-Host "-- GET event subscription (confirma lastDeliveryStatus tras el despacho real) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventGrid/topics/$EgTopic/providers/Microsoft.EventGrid/eventSubscriptions/$EgSub`?api-version=$ApiEventGrid"
+
+Write-Host "-- DELETE event subscription --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventGrid/topics/$EgTopic/providers/Microsoft.EventGrid/eventSubscriptions/$EgSub`?api-version=$ApiEventGrid"
+
+Write-Host "-- DELETE Event Grid topic --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventGrid/topics/$EgTopic`?api-version=$ApiEventGrid"
+
+Remove-Item -Force $EgTopicBodyFile, $EgSubBodyFile -ErrorAction SilentlyContinue
+
+Write-Host "-- PUT Event Hubs namespace (async, 202) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventHub/namespaces/$EhNamespace`?api-version=$ApiEventHub" --body "@$EhNsBodyFile"
+
+Write-Host "-- GET Event Hubs namespace --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventHub/namespaces/$EhNamespace`?api-version=$ApiEventHub"
+
+Write-Host "-- PUT event hub (sub-recurso, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventHub/namespaces/$EhNamespace/eventhubs/$EhHub`?api-version=$ApiEventHub" --body "{}"
+
+Write-Host "-- PUT consumer group (sub-sub-recurso, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventHub/namespaces/$EhNamespace/eventhubs/$EhHub/consumergroups/$EhCg`?api-version=$ApiEventHub" --body "{}"
+
+Write-Host "-- POST enviar evento (data plane) --"
+Invoke-RestMethod -Method Post -Uri "$Endpoint/$EhNamespace.eventhub/$EhHub/messages" -Body "hola desde Event Hubs"
+
+Write-Host "-- GET recibir eventos (offset por defecto) --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$EhNamespace.eventhub/$EhHub/messages" | ConvertTo-Json -Depth 10
+
+Write-Host "-- GET recibir eventos vía consumer group --"
+Invoke-RestMethod -Method Get -Uri "$Endpoint/$EhNamespace.eventhub/$EhHub/consumergroups/$EhCg/messages" | ConvertTo-Json -Depth 10
+
+Write-Host "-- DELETE consumer group --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventHub/namespaces/$EhNamespace/eventhubs/$EhHub/consumergroups/$EhCg`?api-version=$ApiEventHub"
+
+Write-Host "-- DELETE event hub --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventHub/namespaces/$EhNamespace/eventhubs/$EhHub`?api-version=$ApiEventHub"
+
+Write-Host "-- DELETE Event Hubs namespace --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.EventHub/namespaces/$EhNamespace`?api-version=$ApiEventHub"
+
+Remove-Item -Force $EhNsBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

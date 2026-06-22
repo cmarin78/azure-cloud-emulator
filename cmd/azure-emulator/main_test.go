@@ -24,6 +24,8 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/authorization"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
+	"github.com/cesarmarin/azure-emulator/internal/services/eventgrid"
+	"github.com/cesarmarin/azure-emulator/internal/services/eventhub"
 	"github.com/cesarmarin/azure-emulator/internal/services/graph"
 	"github.com/cesarmarin/azure-emulator/internal/services/keyvault"
 	"github.com/cesarmarin/azure-emulator/internal/services/monitor"
@@ -65,7 +67,11 @@ func TestAllServicesRegisterWithoutPanic(t *testing.T) {
 	monitor.New(db).Register(mux)
 	appservice.New(db).Register(mux)
 	authorization.New(db).Register(mux)
-	registerDataPlane(mux, db, keyVaultSvc, serviceBusSvc, cosmosSvc)
+	eventGridSvc := eventgrid.New(db)
+	eventGridSvc.Register(mux)
+	eventHubSvc := eventhub.New(db, ops)
+	eventHubSvc.Register(mux)
+	registerDataPlane(mux, db, keyVaultSvc, serviceBusSvc, cosmosSvc, eventGridSvc, eventHubSvc)
 
 	armmeta.New().Register(mux, "http://localhost:10000")
 	aadtoken.New().Register(mux)

@@ -153,6 +153,13 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.ManagedIdentity", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "userAssignedIdentities", Locations: []string{"eastus", "westus2"}},
 	}},
+	{Namespace: "Microsoft.EventGrid", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "topics", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "eventSubscriptions", Locations: []string{"eastus", "westus2"}},
+	}},
+	{Namespace: "Microsoft.EventHub", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

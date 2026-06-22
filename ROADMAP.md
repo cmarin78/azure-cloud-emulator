@@ -69,17 +69,23 @@ listkeys` action routes are implemented. Phase 15 (Entra ID & RBAC) is
 done: app registrations and service principals (Microsoft Graph stub,
 extending Phase 8) plus custom role definitions and role assignments
 (`Microsoft.Authorization`, with scope-isolated subscription/
-resource-group storage) are implemented. See the table below for the
-per-phase breakdown. Phases 16-19 below extend the existing
-shape-compatible coverage (identities, eventing, API Management, ARM/
-Bicep deployments); Phases 20-22 are a newer plan to layer some real
-*behavior* on top of specific already-shape-only resources, inspired
-by a direct review of gcp-emulator's own Phase 11 ("behavioral logic
-layer" — real Pub/Sub push, Cloud Scheduler firing, Cloud Tasks
-dispatch) and Phase 12 (pluggable real-execution backends) — see those
-phases for the rationale and the concrete patterns being ported. Phase
-20 (Action Groups real webhook delivery) is done: `createNotifications`
-now dispatches a real HTTP POST to each `webhookReceivers` entry — see
+resource-group storage) are implemented. Phase 16 (Managed Identities)
+is done: user-assigned identities (ARM CRUD) plus a system-assigned
+`identity` sub-object on App Service sites, VMs, and AKS clusters are
+implemented. Phase 17 (Eventing) is done: Event Grid topics + event
+subscriptions (with real webhook delivery on publish) and Event Hubs
+namespaces/event hubs/consumer groups (with simplified send/receive)
+are implemented — see Phase 17 below for details. See the table below
+for the per-phase breakdown. Phases 18-19 below extend the existing
+shape-compatible coverage (API Management, ARM/Bicep deployments);
+Phases 20-22 are a newer plan to layer some real *behavior* on top of
+specific already-shape-only resources, inspired by a direct review of
+gcp-emulator's own Phase 11 ("behavioral logic layer" — real Pub/Sub
+push, Cloud Scheduler firing, Cloud Tasks dispatch) and Phase 12
+(pluggable real-execution backends) — see those phases for the
+rationale and the concrete patterns being ported. Phase 20 (Action
+Groups real webhook delivery) is done: `createNotifications` now
+dispatches a real HTTP POST to each `webhookReceivers` entry — see
 Phase 20 below for details.
 
 Note on architecture: path-style data-plane services (blob, queue,
@@ -599,35 +605,73 @@ a real `terraform apply`/`destroy` cycle
 (`terraform/smoke-test/main.tf`, via the `http` provider, with a
 `data.http.user_assigned_identity` read-back check).
 
-## Phase 17 — Eventing (Event Grid + Event Hubs) 🔜 planned
+## Phase 17 — Eventing (Event Grid + Event Hubs) ✅ completed
 
 Independent of everything above; sized similarly to Service Bus
-(Phase 6), and likely the next package-sized addition after
-Phases 15/16 land.
+(Phase 6).
 
 | Service | Minimum resources | Effort | Status |
 |---|---|---|---|
-| Event Grid | topics (ARM CRUD, sync), event subscriptions (ARM CRUD, sync, webhook endpoint reference), publish (data-plane, sync) — **real webhook delivery on publish**, see below | M | planned |
-| Event Hubs | namespaces (ARM CRUD, async), event hubs + consumer groups (ARM CRUD, sync), send/receive (data-plane, simplified — no real partitioning/checkpointing) | M | planned |
+| Event Grid | topics (ARM CRUD, sync), event subscriptions (ARM CRUD, sync, webhook endpoint reference), publish (data-plane, sync) — **real webhook delivery on publish** | M | done |
+| Event Hubs | namespaces (ARM CRUD, async), event hubs + consumer groups (ARM CRUD, sync), send/receive (data-plane, simplified — no real partitioning/checkpointing) | M | done |
 
-Mirrors Service Bus's split (Phase 6): namespace-level resources are
-async (matching real Azure's LRO pattern for both Event Hubs
-namespaces and Service Bus namespaces), child resources are sync.
+Mirrors Service Bus's split (Phase 6): namespace-level resources
+(Event Hubs namespaces) are async (matching real Azure's LRO pattern),
+child resources (Event Grid topics, event subscriptions, event hubs,
+consumer groups) are sync.
 
-Updated scope (revised after reviewing gcp-emulator's Phase 11
-"behavioral logic layer"): Event Grid event subscriptions with a
-webhook `endpointType` should deliver **real** HTTP POSTs on publish,
-not just validate-and-discard. This is a direct port of the pattern
-gcp-emulator already shipped for Pub/Sub push delivery
-(`internal/services/pubsub`'s `deliverPush`) — a `*http.Client` with a
-short timeout, a fire-and-forget goroutine per publish, the standard
-EventGridEvent/CloudEvents JSON wire shape, no retry or
-dead-lettering (documented limitation, same as gcp-emulator's). No new
-runtime dependency. Event Hubs partitioning/checkpointing remains
-explicitly out of scope — there's no equivalent shipped pattern to
-draw from yet, and real partition/offset semantics are a much larger
-undertaking than a single webhook POST. See Phase 20 below for the
-equivalent upgrade to the already-implemented Monitor action groups.
+Event Grid event subscriptions with a webhook `endpointType` deliver
+**real** HTTP POSTs on publish, not just validate-and-discard — a
+direct port of the pattern gcp-emulator already shipped for Pub/Sub
+push delivery (`internal/services/pubsub`'s `deliverPush`): a
+`*http.Client` with a short timeout, a fire-and-forget goroutine per
+publish, the standard EventGridEvent JSON wire shape, no retry or
+dead-lettering (documented limitation, same as gcp-emulator's and the
+same convention already used for Phase 20's action-group webhook
+dispatch). The dispatch result is recorded via two emulator-only
+fields on the event subscription — `lastDeliveryStatus`/
+`lastDeliveryTime` — not part of real Azure's shape but harmless,
+same convention as Phase 20's `lastNotificationStatus`/
+`lastNotificationTime`. Event Grid topics expose a data-plane publish
+endpoint at `{topic}.eventgrid/api/events` (path-style routing,
+matching the existing `.eventgrid`-suffix convention shared with
+blob/queue/table/Service Bus/Cosmos DB), accepting an array of events
+and fanning each one out to every event subscription on the topic. As
+planned, Event Hubs partitioning/checkpointing stays out of scope —
+send/receive is a simplified flat offset-ordered log per event hub,
+with `lastDeliveryStatus`-equivalent observability not needed since
+there's no push delivery on this side; a consumer group's GET reads
+from the same underlying log as the direct `{hub}/messages` path
+rather than tracking its own independent checkpoint.
+
+Implemented in two new packages, `internal/services/eventgrid` and
+`internal/services/eventhub`, both registered in `cmd/azure-emulator/
+main.go` and `resourcemanager.go`'s `registeredNamespaces`
+(`Microsoft.EventGrid`/`Microsoft.EventHub`). Event Grid topic/event
+subscription deletes are idempotent (204 if missing, matching resource
+groups' convention); Event Hubs namespace/hub/consumer-group deletes
+follow the same convention, with namespace delete being async (202)
+like the namespace create, matching Service Bus's and AKS's async
+delete pattern. Confirmed via `eventgrid_test.go`/`eventhub_test.go`
+(`httptest`, covering topic/event subscription/event hub/consumer
+group CRUD, publish fan-out, and the webhook dispatch outcome fields),
+the `az rest` smoke tests (`scripts/test-az-cli.sh`/`.ps1` — Event
+Grid topic create → event subscription with a webhook destination →
+publish → GET confirming a recorded delivery attempt; Event Hubs
+namespace create (async) → event hub → consumer group → send → receive
+via both the direct path and the consumer-group path → cleanup
+deletes), and a real `terraform apply`/`destroy` cycle
+(`terraform/smoke-test/main.tf`, via the `http` provider — 55
+resources applied/destroyed including the new Event Grid/Event Hubs
+blocks, with `data.http` read-backs confirming the topic's publish
+endpoint, the event subscription's recorded webhook-delivery-attempt
+fields, and a roundtrip send/receive on the event hub). The webhook
+destination used in both smoke tests is a deliberately unreachable
+placeholder URL (`localhost:10999`), so the recorded outcome is a real
+connection-refused failure captured in `lastDeliveryStatus` — proving
+the dispatch is a genuine outbound HTTP attempt, not a stub, the same
+verification approach already used for Phase 20's action-group webhook
+delivery.
 
 ## Phase 18 — API Management 🔜 planned
 

@@ -19,6 +19,8 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
+	"github.com/cesarmarin/azure-emulator/internal/services/eventgrid"
+	"github.com/cesarmarin/azure-emulator/internal/services/eventhub"
 	"github.com/cesarmarin/azure-emulator/internal/services/functions"
 	"github.com/cesarmarin/azure-emulator/internal/services/graph"
 	"github.com/cesarmarin/azure-emulator/internal/services/keyvault"
@@ -96,7 +98,11 @@ func main() {
 	aks.New(db, ops).Register(srv.Mux())
 	authorization.New(db).Register(srv.Mux())
 	managedidentity.New(db).Register(srv.Mux())
-	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc)
+	eventGridSvc := eventgrid.New(db)
+	eventGridSvc.Register(srv.Mux())
+	eventHubSvc := eventhub.New(db, ops)
+	eventHubSvc.Register(srv.Mux())
+	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc, eventGridSvc, eventHubSvc)
 
 	// Descubrimiento de metadata ARM + emisor de tokens AAD falso: permiten
 	// que `az cloud register`/`az login --service-principal` y el provider
@@ -161,7 +167,7 @@ func main() {
 // ("conflicts with pattern"). Por eso este es el único lugar que llama
 // mux.HandleFunc para estos servicios: lee el primer segmento del path
 // una vez y despacha por sufijo al ServeHTTP del servicio que corresponda.
-func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault.Service, serviceBusSvc *servicebus.Service, cosmosSvc *cosmosdb.Service) {
+func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault.Service, serviceBusSvc *servicebus.Service, cosmosSvc *cosmosdb.Service, eventGridSvc *eventgrid.Service, eventHubSvc *eventhub.Service) {
 	blobSvc := blob.New(db)
 	queueSvc := queue.New(db)
 	tableSvc := table.New(db)
@@ -181,9 +187,13 @@ func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault
 			serviceBusSvc.ServeHTTP(w, r)
 		case strings.HasSuffix(accountResource, ".documents"):
 			cosmosSvc.ServeHTTP(w, r)
+		case strings.HasSuffix(accountResource, ".eventgrid"):
+			eventGridSvc.ServeHTTP(w, r)
+		case strings.HasSuffix(accountResource, ".eventhub"):
+			eventHubSvc.ServeHTTP(w, r)
 		default:
 			server.WriteError(w, http.StatusNotFound, "ResourceNotFound",
-				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...', '{account}.queue/...', '{account}.table/...', '{vault}.vault/...', '{namespace}.servicebus/...' o '{account}.documents/...'")
+				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...', '{account}.queue/...', '{account}.table/...', '{vault}.vault/...', '{namespace}.servicebus/...', '{account}.documents/...', '{topic}.eventgrid/...' o '{namespace}.eventhub/...'")
 		}
 	})
 }

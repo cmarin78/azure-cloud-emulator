@@ -202,6 +202,31 @@ variable "user_assigned_identity" {
   default = "tfsmokeidentity"
 }
 
+variable "eg_topic" {
+  type    = string
+  default = "tfsmoke-egtopic"
+}
+
+variable "eg_subscription" {
+  type    = string
+  default = "tfsmoke-egsub"
+}
+
+variable "eh_namespace" {
+  type    = string
+  default = "tfsmoketeh"
+}
+
+variable "eh_hub" {
+  type    = string
+  default = "tfsmoke-hub"
+}
+
+variable "eh_consumer_group" {
+  type    = string
+  default = "tfsmoke-cg"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -872,6 +897,96 @@ resource "null_resource" "user_assigned_identity" {
   }
 }
 
+# Fase 17 (Eventing): Event Grid topic + event subscription (webhook) +
+# publish, y Event Hubs namespace (async) + event hub + consumer group +
+# send (data-plane). El subscriber del webhook es un placeholder
+# (localhost:10999) porque solo nos interesa verificar que el emulador
+# acepta y persiste la suscripción y que el publish dispara el intento de
+# entrega (lastDeliveryStatus se verifica en el bloque data "http" más abajo).
+resource "null_resource" "eg_topic" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    topic = var.eg_topic
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventGrid/topics/${var.eg_topic}?api-version=2022-06-15' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\"}'"
+  }
+}
+
+resource "null_resource" "eg_subscription" {
+  depends_on = [null_resource.eg_topic]
+  triggers = {
+    sub = var.eg_subscription
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventGrid/topics/${var.eg_topic}/providers/Microsoft.EventGrid/eventSubscriptions/${var.eg_subscription}?api-version=2022-06-15' -ContentType 'application/json' -Body '{\"properties\": {\"destination\": {\"endpointType\": \"WebHook\", \"properties\": {\"endpointUrl\": \"http://localhost:10999/webhook\"}}}}'"
+  }
+}
+
+resource "null_resource" "eg_publish" {
+  depends_on = [null_resource.eg_subscription]
+  triggers = {
+    topic = var.eg_topic
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Post -Uri '${var.endpoint}/${var.eg_topic}.eventgrid/api/events' -ContentType 'application/json' -Body '[{\"id\": \"tfsmoke-event-1\", \"eventType\": \"TfSmoke.Test\", \"subject\": \"tfsmoke\", \"eventTime\": \"2024-01-01T00:00:00Z\", \"data\": {\"hello\": \"terraform\"}, \"dataVersion\": \"1.0\"}]'; Start-Sleep -Seconds 1"
+  }
+}
+
+resource "null_resource" "eh_namespace" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    ns = var.eh_namespace
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventHub/namespaces/${var.eh_namespace}?api-version=2021-11-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"sku\": {\"name\": \"Standard\"}}'"
+  }
+}
+
+resource "null_resource" "eh_hub" {
+  depends_on = [null_resource.eh_namespace]
+  triggers = {
+    hub = var.eh_hub
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventHub/namespaces/${var.eh_namespace}/eventhubs/${var.eh_hub}?api-version=2021-11-01' -ContentType 'application/json' -Body '{}'"
+  }
+}
+
+resource "null_resource" "eh_consumer_group" {
+  depends_on = [null_resource.eh_hub]
+  triggers = {
+    cg = var.eh_consumer_group
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventHub/namespaces/${var.eh_namespace}/eventhubs/${var.eh_hub}/consumergroups/${var.eh_consumer_group}?api-version=2021-11-01' -ContentType 'application/json' -Body '{}'"
+  }
+}
+
+resource "null_resource" "eh_send" {
+  depends_on = [null_resource.eh_consumer_group]
+  triggers = {
+    hub = var.eh_hub
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Post -Uri '${var.endpoint}/${var.eh_namespace}.eventhub/${var.eh_hub}/messages' -ContentType 'text/plain' -Body 'hola desde terraform smoke test'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -1118,6 +1233,36 @@ data "http" "user_assigned_identity" {
   url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${var.user_assigned_identity}?api-version=2023-01-31"
 }
 
+data "http" "eg_topic" {
+  depends_on = [null_resource.eg_topic]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventGrid/topics/${var.eg_topic}?api-version=2022-06-15"
+}
+
+data "http" "eg_subscription" {
+  depends_on = [null_resource.eg_publish]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventGrid/topics/${var.eg_topic}/providers/Microsoft.EventGrid/eventSubscriptions/${var.eg_subscription}?api-version=2022-06-15"
+}
+
+data "http" "eh_namespace" {
+  depends_on = [null_resource.eh_namespace]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventHub/namespaces/${var.eh_namespace}?api-version=2021-11-01"
+}
+
+data "http" "eh_hub" {
+  depends_on = [null_resource.eh_hub]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventHub/namespaces/${var.eh_namespace}/eventhubs/${var.eh_hub}?api-version=2021-11-01"
+}
+
+data "http" "eh_consumer_group" {
+  depends_on = [null_resource.eh_consumer_group]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.EventHub/namespaces/${var.eh_namespace}/eventhubs/${var.eh_hub}/consumergroups/${var.eh_consumer_group}?api-version=2021-11-01"
+}
+
+data "http" "eh_receive" {
+  depends_on = [null_resource.eh_send]
+  url        = "${var.endpoint}/${var.eh_namespace}.eventhub/${var.eh_hub}/messages"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -1288,4 +1433,28 @@ output "role_assignments_sub_list_response" {
 
 output "user_assigned_identity_response" {
   value = jsondecode(data.http.user_assigned_identity.response_body)
+}
+
+output "eg_topic_response" {
+  value = jsondecode(data.http.eg_topic.response_body)
+}
+
+output "eg_subscription_response" {
+  value = jsondecode(data.http.eg_subscription.response_body)
+}
+
+output "eh_namespace_response" {
+  value = jsondecode(data.http.eh_namespace.response_body)
+}
+
+output "eh_hub_response" {
+  value = jsondecode(data.http.eh_hub.response_body)
+}
+
+output "eh_consumer_group_response" {
+  value = jsondecode(data.http.eh_consumer_group.response_body)
+}
+
+output "eh_receive_response" {
+  value = jsondecode(data.http.eh_receive.response_body)
 }
