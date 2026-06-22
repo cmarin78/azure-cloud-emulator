@@ -24,19 +24,26 @@ package monitor
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/cesarmarin/azure-emulator/internal/storage"
 )
 
 // Service agrupa el estado necesario para atender las rutas de Monitor/Log
 // Analytics (workspaces, action groups, metric alerts, y el stub de query).
+//
+// httpClient lo usa actiongroups.go para el despacho real de webhooks (Fase
+// 20: capa de comportamiento) -- mismo patrón (*http.Client con timeout
+// corto, sin reintentos) que gcp-emulator usa en cloudscheduler/cloudtasks
+// para sus propios despachos HTTP reales.
 type Service struct {
-	db *storage.DB
+	db         *storage.DB
+	httpClient *http.Client
 }
 
 // New crea el servicio de Monitor/Log Analytics.
 func New(db *storage.DB) *Service {
-	return &Service{db: db}
+	return &Service{db: db, httpClient: &http.Client{Timeout: 10 * time.Second}}
 }
 
 // Register monta tanto las rutas ARM (control plane) como el stub de data

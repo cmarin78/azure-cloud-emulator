@@ -424,7 +424,7 @@ $WorkspaceBodyFile = New-TemporaryFile
 $ActionGroupBodyFile = New-TemporaryFile
 $MetricAlertBodyFile = New-TemporaryFile
 "{`"location`": `"$Location`"}" | Set-Content -NoNewline -Path $WorkspaceBodyFile
-'{"location": "global", "properties": {"groupShortName": "smoketest", "emailReceivers": [{"name": "admin", "emailAddress": "admin@example.com"}]}}' | Set-Content -NoNewline -Path $ActionGroupBodyFile
+'{"location": "global", "properties": {"groupShortName": "smoketest", "emailReceivers": [{"name": "admin", "emailAddress": "admin@example.com"}], "webhookReceivers": [{"name": "smoketesthook", "serviceUri": "http://localhost:10999/webhook"}]}}' | Set-Content -NoNewline -Path $ActionGroupBodyFile
 
 $ActionGroupId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups/$ActionGroup"
 "{`"location`": `"global`", `"properties`": {`"severity`": 2, `"scopes`": [`"$NicId`"], `"criteria`": {`"odata.type`": `"Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria`"}, `"actions`": [{`"actionGroupId`": `"$ActionGroupId`"}]}}" | Set-Content -NoNewline -Path $MetricAlertBodyFile
@@ -452,6 +452,12 @@ az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/prov
 
 Write-Host "-- LIST action groups --"
 az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups`?api-version=$ApiInsights"
+
+Write-Host "-- POST createNotifications (Fase 20: dispara un webhook real a http://localhost:10999/webhook) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups/$ActionGroup/createNotifications`?api-version=$ApiInsights" --body "{}"
+
+Write-Host "-- GET action group (confirma lastNotificationStatus tras el despacho real) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/actionGroups/$ActionGroup`?api-version=$ApiInsights"
 
 Write-Host "-- PUT metric alert (ARM, sync) --"
 az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Insights/metricAlerts/$MetricAlert`?api-version=$ApiInsights" --body "@$MetricAlertBodyFile"

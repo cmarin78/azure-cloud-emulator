@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cesarmarin/azure-emulator/internal/testutil"
 )
@@ -147,6 +148,68 @@ func TestActionGroupLifecycle(t *testing.T) {
 	status = testutil.DoJSON(t, "DELETE", testutil.WithAPIVersion(base), nil, nil)
 	if status != http.StatusNoContent {
 		t.Fatalf("idempotent delete action group: want 204, got %d", status)
+	}
+}
+
+func TestActionGroupCreateNotificationsDispatchesRealWebhook(t *testing.T) {
+	srv := newTestServer(t)
+	base := srv.URL + "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/actionGroups/myactiongroup"
+
+	received := make(chan map[string]any, 1)
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		received <- body
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(receiver.Close)
+
+	var ag ActionGroup
+	status := testutil.DoJSON(t, "PUT", testutil.WithAPIVersion(base), map[string]any{
+		"location": "global",
+		"properties": map[string]any{
+			"groupShortName": "shortname",
+			"webhookReceivers": []map[string]any{
+				{"name": "hook1", "serviceUri": receiver.URL},
+			},
+		},
+	}, &ag)
+	if status != http.StatusCreated {
+		t.Fatalf("put action group: status=%d", status)
+	}
+
+	var notifyResp map[string]any
+	status = testutil.DoJSON(t, "POST", testutil.WithAPIVersion(base+"/createNotifications"), map[string]any{}, &notifyResp)
+	if status != http.StatusOK {
+		t.Fatalf("createNotifications: status=%d", status)
+	}
+	if notifyResp["notificationStatus"] != "ok" || notifyResp["dispatchedCount"].(float64) != 1 {
+		t.Fatalf("expected successful dispatch, got %+v", notifyResp)
+	}
+
+	select {
+	case body := <-received:
+		if body["schemaId"] != "azureMonitorCommonAlertSchema" {
+			t.Fatalf("expected common alert schema payload, got %+v", body)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("webhook receiver never received a real HTTP call")
+	}
+
+	var got ActionGroup
+	status = testutil.DoJSON(t, "GET", testutil.WithAPIVersion(base), nil, &got)
+	if status != http.StatusOK || got.Properties.LastNotificationStatus != "ok" || got.Properties.LastNotificationTime == "" {
+		t.Fatalf("expected lastNotification* to be recorded, got %+v", got.Properties)
+	}
+}
+
+func TestActionGroupCreateNotificationsRequiresExistingGroup(t *testing.T) {
+	srv := newTestServer(t)
+	base := srv.URL + "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/actionGroups/missing/createNotifications"
+
+	status := testutil.DoJSON(t, "POST", testutil.WithAPIVersion(base), map[string]any{}, nil)
+	if status != http.StatusNotFound {
+		t.Fatalf("createNotifications on missing action group: want 404, got %d", status)
 	}
 }
 

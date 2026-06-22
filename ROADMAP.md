@@ -77,7 +77,10 @@ Bicep deployments); Phases 20-22 are a newer plan to layer some real
 by a direct review of gcp-emulator's own Phase 11 ("behavioral logic
 layer" — real Pub/Sub push, Cloud Scheduler firing, Cloud Tasks
 dispatch) and Phase 12 (pluggable real-execution backends) — see those
-phases for the rationale and the concrete patterns being ported.
+phases for the rationale and the concrete patterns being ported. Phase
+20 (Action Groups real webhook delivery) is done: `createNotifications`
+now dispatches a real HTTP POST to each `webhookReceivers` entry — see
+Phase 20 below for details.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -645,32 +648,59 @@ logic. `what-if` is out of scope (it requires diffing against current
 state in a way none of the other phases need); `validate` always
 returns success.
 
-## Phase 20 — Action Groups: real webhook delivery 🔜 planned
+## Phase 20 — Action Groups: real webhook delivery ✅ completed
 
 Standalone upgrade to the already-implemented Phase 10 `monitor`
 package — no new package, no new ARM resource. Smallest and
-lowest-risk step in the behavioral-layer plan below, since the shape
-(`ActionGroupProperties.WebhookReceivers`) already exists and is
-already persisted; only the dispatch is missing.
+lowest-risk step in the behavioral-layer plan, since the shape
+(`ActionGroupProperties.WebhookReceivers`) already existed and was
+already persisted; only the dispatch was missing.
 
 | Component | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| `dispatch()` real HTTP POST to each `webhookReceivers` entry | Action groups (Phase 10) | Today the comment in `actiongroups.go` says explicitly "no se envía ninguna notificación real" — this closes that gap for the webhook receiver type only (email/SMS/Azure Function receivers stay shape-only, same as today) | S | planned |
-| `POST .../actionGroups/{name}:fireTestNotification` (sync action) | `dispatch()` above | Mirrors the real Azure Monitor API's own test-notification action — the natural trigger point, since there's no real metrics pipeline to fire an action group automatically (metric alert `criteria` is still never evaluated, same as Phase 10) | S | planned |
+| `dispatch()` real HTTP POST to each `webhookReceivers` entry | Action groups (Phase 10) | Closes the gap the old comment in `actiongroups.go` called out explicitly ("no se envía ninguna notificación real") for the webhook receiver type only — email/SMS/Azure Function receivers stay shape-only, same as before | S | done |
+| `POST .../actionGroups/{name}/createNotifications` (sync action) | `dispatch()` above | Real Azure Monitor API's own test-notification action name (revised from the originally-planned `:fireTestNotification` — Azure uses a literal sub-path, same convention as `start`/`stop`/`restart` in `appservice`, not a gcp-style colon action) | S | done |
 
-Directly modeled on gcp-emulator's Cloud Tasks `dispatchTask`/Cloud
-Scheduler `dispatch` (`internal/services/cloudtasks`,
-`internal/services/cloudscheduler`): a package-level `httpClient :=
-&http.Client{Timeout: 10 * time.Second}`, a `go s.dispatch(...)` so the
-HTTP call never blocks the response, and the result (success/`http
-4xx-5xx`/network error) is worth recording somewhere visible — this
+Implemented in `internal/services/monitor/actiongroups.go`/`monitor.go`,
+directly modeled on gcp-emulator's Cloud Tasks/Cloud Scheduler dispatch
+pattern (`internal/services/cloudtasks`, `internal/services/cloudscheduler`):
+a `*http.Client{Timeout: 10 * time.Second}` held on `Service`, a real
+`http.NewRequestWithContext` POST per `webhookReceivers` entry, no
+retry, no dead-lettering — explicit documented limitation, same
+convention used everywhere else in this project (Key Vault's simulated
+crypto, AKS's unevaluated `provisioningState`). Unlike Cloud
+Scheduler's long-running goroutine, `dispatch()` runs synchronously
+inside the `createNotifications` request, since the only trigger is
+that one explicit action, not a continuous metrics pipeline (metric
+alert `criteria` is still never evaluated, same as Phase 10). The
+outbound body is a minimal subset of Azure Monitor's "common alert
+schema" (`schemaId: azureMonitorCommonAlertSchema`,
+`data.essentials.{alertId, alertRule, severity, signalType,
+monitorCondition, firedDateTime}`) — enough for a real webhook
+receiver to recognize a test dispatch, not a full replica. This
 emulator doesn't have gcp-emulator's `internal/activity` (a shared
-Logging+Monitoring event sink), so the simplest option is to just
-extend the existing `ActionGroup`/fire-result with a `lastFireTime`/
-`lastFireStatus` field, deferring a real activity-log sink to Phase 22
-or later. No retry, no dead-lettering — explicit documented limitation,
-same convention used everywhere else in this project (Key Vault's
-simulated crypto, AKS's unevaluated `provisioningState`).
+Logging+Monitoring event sink), so the result is recorded via two
+emulator-only fields added to `ActionGroupProperties` —
+`lastNotificationTime`/`lastNotificationStatus` — not part of real
+Azure's shape, but harmless since real clients (az CLI/Terraform)
+ignore unknown JSON response fields; a real activity-log sink remains
+deferred to Phase 22 or later. Confirmed via `monitor_test.go`
+(`httptest`, covering a successful dispatch with payload assertion and
+a 404 on a missing action group), and a live manual end-to-end
+verification: the real emulator binary running against a real
+independent HTTP listener on a different port, driven through `az
+rest` (`PUT` resource group → `PUT` action group with a
+`webhookReceivers` entry → `POST createNotifications` → `GET` action
+group), confirming the listener actually received the common-alert-
+schema JSON payload over the network and that
+`lastNotificationStatus`/`lastNotificationTime` were persisted.
+Terraform coverage is intentionally unchanged: `azurerm_monitor_action_group`
+already exercises the `webhook_receiver` shape (Phase 10), but
+`createNotifications` is an imperative test action with no declarative
+Terraform resource/data-source mapping to it — only `az rest` (or the
+real `az monitor action-group test-notifications create` CLI command)
+can invoke it, so this phase is covered by az CLI smoke testing only,
+not Terraform.
 
 ## Phase 21 — Scheduler-equivalent: Logic App Recurrence trigger 🔜 planned
 

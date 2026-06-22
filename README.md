@@ -18,8 +18,9 @@ their endpoints to `localhost`.
 
 ## Current status
 
-All 15 phases below are complete. See [ROADMAP.md](ROADMAP.md) for what's
-planned next (including a behavioral/real-delivery layer inspired by
+All 15 core phases below are complete, plus Phase 20 (real Action Group
+webhook delivery). See [ROADMAP.md](ROADMAP.md) for what's planned next
+(the rest of the behavioral/real-delivery layer inspired by
 gcp-emulator's own Phase 11).
 
 | Phase | Area | What's implemented |
@@ -39,6 +40,7 @@ gcp-emulator's own Phase 11).
 | 13 | AKS | Managed clusters + agent pools (async), `listClusterUserCredential`/`listClusterAdminCredential` — shape-compatible only, no real Kubernetes control plane |
 | 14 | Functions | Function definitions, `syncfunctiontriggers`, `host/default/listkeys` — reuses Phase 11's App Service site, no new resource type needed |
 | 15 | Entra ID & RBAC | App registrations, service principals, custom role definitions, role assignments (scope-isolated subscription/resource-group storage) — no real directory or authorization evaluation |
+| 20 | Action Groups: real webhook delivery | `POST .../actionGroups/{name}/createNotifications` dispatches a real HTTP POST to each `webhookReceivers` entry; result recorded via `lastNotificationTime`/`lastNotificationStatus` (emulator-only fields) |
 
 ### Feature matrix (detail)
 
@@ -105,6 +107,13 @@ gcp-emulator's own Phase 11).
   (`Microsoft.Authorization/roleAssignments`, ARM CRUD, sync,
   scope-isolated subscription/resource-group storage) — no real
   directory or authorization evaluation behind it.
+- **Action Groups real webhook delivery (Phase 20)**: ✅
+  `POST .../actionGroups/{name}/createNotifications` sends a real HTTP
+  POST (Azure common-alert-schema-shaped JSON body) to every
+  `webhookReceivers` entry on the action group, recording the outcome
+  via emulator-only `lastNotificationTime`/`lastNotificationStatus`
+  fields — no retry/dead-lettering, and email/SMS/Azure Function
+  receivers remain shape-only with no real delivery.
 
 ## Project structure
 
@@ -292,7 +301,10 @@ This exercises, end to end against a running emulator instance:
   container create/delete; document put/get/list/delete.
 - **Monitor/Log Analytics**: workspace create/get/list/delete,
   `sharedKeys` action, Log Analytics Query stub, action group create/
-  get/list/delete, metric alert create/get/list/delete.
+  get/list/delete, metric alert create/get/list/delete, and (Phase 20)
+  `createNotifications` dispatching a real webhook POST to a local
+  test listener — confirmed `lastNotificationStatus: "ok"` on the
+  action group afterward.
 - **App Service**: App Service Plan create/get/list/delete; Web App
   create/get/list/delete (referencing a plan by id); app settings put/
   get (StringDictionary, full replace); start/stop/restart actions.
