@@ -75,10 +75,15 @@ is done: user-assigned identities (ARM CRUD) plus a system-assigned
 implemented. Phase 17 (Eventing) is done: Event Grid topics + event
 subscriptions (with real webhook delivery on publish) and Event Hubs
 namespaces/event hubs/consumer groups (with simplified send/receive)
-are implemented — see Phase 17 below for details. See the table below
-for the per-phase breakdown. Phases 18-19 below extend the existing
-shape-compatible coverage (API Management, ARM/Bicep deployments);
-Phases 20-22 are a newer plan to layer some real *behavior* on top of
+are implemented — see Phase 17 below for details. Phase 18 (API
+Management) is done: a service instance (ARM CRUD, async, same
+create-async-always-succeeds pattern as AKS) plus APIs/operations and
+products/subscriptions (sync sub-resources, with deterministic fake
+gateway URLs and subscription keys) are implemented — see Phase 18
+below for details. See the table below for the per-phase breakdown.
+Phase 19 below extends the existing shape-compatible coverage
+(ARM/Bicep deployments); Phases 20-22 are a newer plan to layer some
+real *behavior* on top of
 specific already-shape-only resources, inspired by a direct review of
 gcp-emulator's own Phase 11 ("behavioral logic layer" — real Pub/Sub
 push, Cloud Scheduler firing, Cloud Tasks dispatch) and Phase 12
@@ -673,7 +678,7 @@ the dispatch is a genuine outbound HTTP attempt, not a stub, the same
 verification approach already used for Phase 20's action-group webhook
 delivery.
 
-## Phase 18 — API Management 🔜 planned
+## Phase 18 — API Management ✅ completed
 
 Standalone. Lower priority than Phases 15–17 — API Management's real
 value (policies, real gateway behavior, developer portal) is the part
@@ -682,14 +687,54 @@ stays narrow.
 
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| APIM service instance (ARM CRUD, async) | resource groups | `azurerm_api_management`; the gateway/portal resource itself — provisioning in real Azure takes 30-45 minutes, a good candidate to fake as a long LRO that always succeeds | M | planned |
-| APIs + operations (ARM CRUD, sync, sub-resources) | APIM service | `azurerm_api_management_api`; defines the shape of what's "published", no real proxying behind it | S | planned |
-| Products + subscriptions (ARM CRUD, sync) | APIs | `azurerm_api_management_product`/`_subscription`; commonly provisioned alongside APIs in Terraform configs | S | planned |
+| APIM service instance (ARM CRUD, async) | resource groups | `azurerm_api_management`; the gateway/portal resource itself — provisioning in real Azure takes 30-45 minutes, a good candidate to fake as a long LRO that always succeeds | M | done |
+| APIs + operations (ARM CRUD, sync, sub-resources) | APIM service | `azurerm_api_management_api`; defines the shape of what's "published", no real proxying behind it | S | done |
+| Products + subscriptions (ARM CRUD, sync) | APIs | `azurerm_api_management_product`/`_subscription`; commonly provisioned alongside APIs in Terraform configs | S | done |
 
 No request proxying, no policy evaluation, no real gateway runtime —
 this phase only makes the ARM control-plane resources that
 `azurerm_api_management*` Terraform resources expect to create/read/
 destroy.
+
+Implemented in a new `internal/services/apimanagement` package,
+registered in `cmd/azure-emulator/main.go` and `resourcemanager.go`'s
+`registeredNamespaces` (`Microsoft.ApiManagement`, `service`). The
+service instance follows the same "create-async, always succeeds"
+pattern as AKS's managed clusters (Phase 13): `provisioningState`
+always reports `"Succeeded"`, and `gatewayUrl`/`portalUrl`/
+`developerPortalUrl`/`managementApiUrl`/`scmUrl`/`publicIPAddresses`
+are deterministic per-instance fake values (FNV-32a hash of the
+resource's full ARM ID, same derivation pattern as Public IP's fake
+address in Phase 12 and AKS's fake `fqdn` in Phase 13), so they stay
+stable across repeated GETs. APIs, API operations, and products are
+fully synchronous ARM sub-resources (matching App Service's/AKS's
+sub-resource conventions); the product-API association is a sync PUT
+with no body, mirroring the shape `azurerm_api_management_product_api`
+expects. Subscriptions are synchronous and get deterministic fake
+`primaryKey`/`secondaryKey` values (same FNV-32a-seeded `fakeGUID`
+helper, seeded from the subscription's resource ID), confirmed
+reproducible across independent runs and independent tools (identical
+keys observed from both the PowerShell and bash smoke-test runs
+against fresh DBs). Deleting the service instance cascades
+synchronously to all of its APIs, products, and subscriptions before
+returning the async delete response, matching AKS's "deleting a
+cluster deletes its node pools" cascade convention from Phase 13.
+Service/API/product/subscription deletes are idempotent (204 if
+missing, matching resource groups' convention). Confirmed via
+`apimanagement_test.go` (`httptest`, covering service lifecycle,
+publisher-field validation, API/operation lifecycle and cascade-on-
+parent-delete, missing-parent-service 404, product/subscription
+lifecycle, and full-service-delete cascading over all sub-resources),
+the `az rest` smoke tests (`scripts/test-az-cli.sh`/`.ps1` — service
+PUT/GET/LIST → API PUT/GET → operation PUT/GET → product PUT →
+product-API association → subscription PUT/GET (deterministic
+primaryKey/secondaryKey) → cleanup deletes in reverse dependency
+order), and a real `terraform apply`/`destroy` cycle
+(`terraform/smoke-test/main.tf`, via the `http` provider — 61 resources
+applied including the new API Management block, with `data.http`
+read-backs confirming the service instance's deterministic
+`gatewayUrl`, the product's id, and the subscription's `scope`
+matching the product's resource ID).
 
 ## Phase 19 — ARM template / Bicep deployments 🔜 planned
 

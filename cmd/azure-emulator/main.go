@@ -13,6 +13,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/server"
 	"github.com/cesarmarin/azure-emulator/internal/services/aadtoken"
 	"github.com/cesarmarin/azure-emulator/internal/services/aks"
+	"github.com/cesarmarin/azure-emulator/internal/services/apimanagement"
 	"github.com/cesarmarin/azure-emulator/internal/services/appservice"
 	"github.com/cesarmarin/azure-emulator/internal/services/armmeta"
 	"github.com/cesarmarin/azure-emulator/internal/services/authorization"
@@ -102,6 +103,7 @@ func main() {
 	eventGridSvc.Register(srv.Mux())
 	eventHubSvc := eventhub.New(db, ops)
 	eventHubSvc.Register(srv.Mux())
+	apimanagement.New(db, ops).Register(srv.Mux())
 	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc, eventGridSvc, eventHubSvc)
 
 	// Descubrimiento de metadata ARM + emisor de tokens AAD falso: permiten

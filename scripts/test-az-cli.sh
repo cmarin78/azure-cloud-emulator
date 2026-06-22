@@ -1022,6 +1022,88 @@ echo "-- DELETE Event Hubs namespace --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.EventHub/namespaces/${EH_NAMESPACE}?api-version=${API_EVENTHUB}"
 
+API_APIM="2022-08-01"
+APIM_SVC="smoketestapim"
+APIM_API="echo"
+APIM_OP="get-echo"
+APIM_PRODUCT="starter"
+APIM_SUB="starter-sub"
+
+echo "-- PUT API Management service instance (async, 202 con cuerpo) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}?api-version=${API_APIM}" \
+  --body "{\"location\": \"eastus\", \"sku\": {\"name\": \"Developer\", \"capacity\": 1}, \"properties\": {\"publisherEmail\": \"admin@example.com\", \"publisherName\": \"Contoso\"}}"
+
+echo "-- GET API Management service instance (gatewayUrl/portalUrl deterministas) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}?api-version=${API_APIM}"
+
+echo "-- LIST API Management service instances --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service?api-version=${API_APIM}"
+
+echo "-- PUT API (sub-recurso, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/apis/${APIM_API}?api-version=${API_APIM}" \
+  --body "{\"properties\": {\"displayName\": \"Echo API\", \"path\": \"echo\", \"serviceUrl\": \"https://backend.example.com\"}}"
+
+echo "-- GET API --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/apis/${APIM_API}?api-version=${API_APIM}"
+
+echo "-- PUT API operation (sub-sub-recurso, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/apis/${APIM_API}/operations/${APIM_OP}?api-version=${API_APIM}" \
+  --body "{\"properties\": {\"displayName\": \"GET echo\", \"method\": \"GET\", \"urlTemplate\": \"/{id}\"}}"
+
+echo "-- GET API operation --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/apis/${APIM_API}/operations/${APIM_OP}?api-version=${API_APIM}"
+
+echo "-- PUT product (sub-recurso, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/products/${APIM_PRODUCT}?api-version=${API_APIM}" \
+  --body "{\"properties\": {\"displayName\": \"Starter\"}}"
+
+echo "-- PUT product-api association --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/products/${APIM_PRODUCT}/apis/${APIM_API}?api-version=${API_APIM}"
+
+echo "-- GET product (debe seguir existiendo tras la asociacion) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/products/${APIM_PRODUCT}?api-version=${API_APIM}"
+
+APIM_PRODUCT_ID="/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/products/${APIM_PRODUCT}"
+
+echo "-- PUT subscription (primaryKey/secondaryKey deterministas) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/subscriptions/${APIM_SUB}?api-version=${API_APIM}" \
+  --body "{\"properties\": {\"displayName\": \"Starter subscription\", \"scope\": \"${APIM_PRODUCT_ID}\"}}"
+
+echo "-- GET subscription --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/subscriptions/${APIM_SUB}?api-version=${API_APIM}"
+
+echo "-- DELETE subscription --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/subscriptions/${APIM_SUB}?api-version=${API_APIM}"
+
+echo "-- DELETE product --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/products/${APIM_PRODUCT}?api-version=${API_APIM}"
+
+echo "-- DELETE API operation --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/apis/${APIM_API}/operations/${APIM_OP}?api-version=${API_APIM}"
+
+echo "-- DELETE API --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}/apis/${APIM_API}?api-version=${API_APIM}"
+
+echo "-- DELETE API Management service instance (async, 202; cascada sobre cualquier sub-recurso restante) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}?api-version=${API_APIM}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

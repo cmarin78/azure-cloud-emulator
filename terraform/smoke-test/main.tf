@@ -227,6 +227,31 @@ variable "eh_consumer_group" {
   default = "tfsmoke-cg"
 }
 
+variable "apim_service" {
+  type    = string
+  default = "tfsmokeapim"
+}
+
+variable "apim_api" {
+  type    = string
+  default = "echo"
+}
+
+variable "apim_operation" {
+  type    = string
+  default = "get-echo"
+}
+
+variable "apim_product" {
+  type    = string
+  default = "starter"
+}
+
+variable "apim_subscription" {
+  type    = string
+  default = "starter-sub"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -241,6 +266,7 @@ locals {
   load_balancer_id    = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Network/loadBalancers/${var.load_balancer}"
   func_plan_id        = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Web/serverfarms/${var.func_plan}"
   role_definition_id  = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/${var.role_definition_id}"
+  apim_product_id     = "/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/products/${var.apim_product}"
 }
 
 # PUT resource group (data source con `http` no soporta PUT, así que usamos
@@ -987,6 +1013,84 @@ resource "null_resource" "eh_send" {
   }
 }
 
+# Fase 18 (API Management): service instance (ARM, asíncrono, mismo patrón
+# que AKS/managedClusters) + API + operation (sub-recursos síncronos) +
+# product + asociación product-api (síncronos) + subscription (síncrono,
+# primaryKey/secondaryKey deterministas vía fakeGUID — ver
+# internal/services/apimanagement/service.go). Mismo patrón null_resource +
+# local-exec del resto del archivo.
+resource "null_resource" "apim_service" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    service = var.apim_service
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}?api-version=2022-08-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"sku\": {\"name\": \"Developer\", \"capacity\": 1}, \"properties\": {\"publisherEmail\": \"admin@example.com\", \"publisherName\": \"Contoso\"}}'"
+  }
+}
+
+resource "null_resource" "apim_api" {
+  depends_on = [null_resource.apim_service]
+  triggers = {
+    api = var.apim_api
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/apis/${var.apim_api}?api-version=2022-08-01' -ContentType 'application/json' -Body '{\"properties\": {\"displayName\": \"Echo API\", \"path\": \"echo\", \"serviceUrl\": \"https://backend.example.com\"}}'"
+  }
+}
+
+resource "null_resource" "apim_operation" {
+  depends_on = [null_resource.apim_api]
+  triggers = {
+    operation = var.apim_operation
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/apis/${var.apim_api}/operations/${var.apim_operation}?api-version=2022-08-01' -ContentType 'application/json' -Body '{\"properties\": {\"displayName\": \"GET echo\", \"method\": \"GET\", \"urlTemplate\": \"/{id}\"}}'"
+  }
+}
+
+resource "null_resource" "apim_product" {
+  depends_on = [null_resource.apim_service]
+  triggers = {
+    product = var.apim_product
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/products/${var.apim_product}?api-version=2022-08-01' -ContentType 'application/json' -Body '{\"properties\": {\"displayName\": \"Starter\"}}'"
+  }
+}
+
+resource "null_resource" "apim_product_api" {
+  depends_on = [null_resource.apim_product, null_resource.apim_api]
+  triggers = {
+    association = "${var.apim_product}-${var.apim_api}"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/products/${var.apim_product}/apis/${var.apim_api}?api-version=2022-08-01'"
+  }
+}
+
+resource "null_resource" "apim_subscription" {
+  depends_on = [null_resource.apim_product_api]
+  triggers = {
+    subscription = var.apim_subscription
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/subscriptions/${var.apim_subscription}?api-version=2022-08-01' -ContentType 'application/json' -Body '{\"properties\": {\"displayName\": \"Starter subscription\", \"scope\": \"${local.apim_product_id}\"}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -1263,6 +1367,36 @@ data "http" "eh_receive" {
   url        = "${var.endpoint}/${var.eh_namespace}.eventhub/${var.eh_hub}/messages"
 }
 
+# Fase 18 (API Management): verificación de lectura, mismo patrón.
+data "http" "apim_service" {
+  depends_on = [null_resource.apim_service]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}?api-version=2022-08-01"
+}
+
+data "http" "apim_api" {
+  depends_on = [null_resource.apim_api]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/apis/${var.apim_api}?api-version=2022-08-01"
+}
+
+data "http" "apim_operation" {
+  depends_on = [null_resource.apim_operation]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/apis/${var.apim_api}/operations/${var.apim_operation}?api-version=2022-08-01"
+}
+
+data "http" "apim_product" {
+  depends_on = [null_resource.apim_product_api]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/products/${var.apim_product}?api-version=2022-08-01"
+}
+
+# Las claves devueltas aquí deben coincidir con las verificadas vía az CLI
+# (mismo seed determinista, ver fakeGUID en
+# internal/services/apimanagement/service.go) -- útil para confirmar que el
+# valor no cambia entre runs/herramientas distintas contra una misma DB.
+data "http" "apim_subscription" {
+  depends_on = [null_resource.apim_subscription]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ApiManagement/service/${var.apim_service}/subscriptions/${var.apim_subscription}?api-version=2022-08-01"
+}
+
 output "resource_group_response" {
   value = jsondecode(data.http.resource_group.response_body)
 }
@@ -1457,4 +1591,24 @@ output "eh_consumer_group_response" {
 
 output "eh_receive_response" {
   value = jsondecode(data.http.eh_receive.response_body)
+}
+
+output "apim_service_response" {
+  value = jsondecode(data.http.apim_service.response_body)
+}
+
+output "apim_api_response" {
+  value = jsondecode(data.http.apim_api.response_body)
+}
+
+output "apim_operation_response" {
+  value = jsondecode(data.http.apim_operation.response_body)
+}
+
+output "apim_product_response" {
+  value = jsondecode(data.http.apim_product.response_body)
+}
+
+output "apim_subscription_response" {
+  value = jsondecode(data.http.apim_subscription.response_body)
 }

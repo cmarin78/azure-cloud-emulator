@@ -160,6 +160,9 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.EventHub", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}},
 	}},
+	{Namespace: "Microsoft.ApiManagement", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "service", Locations: []string{"eastus", "westus2"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

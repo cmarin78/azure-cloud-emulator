@@ -18,11 +18,10 @@ their endpoints to `localhost`.
 
 ## Current status
 
-All 17 core phases below are complete, plus Phase 20 (real Action Group
+All 18 core phases below are complete, plus Phase 20 (real Action Group
 webhook delivery). See [ROADMAP.md](ROADMAP.md) for what's planned next
-(API Management, ARM/Bicep deployments, and the rest of the
-behavioral/real-delivery layer inspired by gcp-emulator's own
-Phase 11).
+(ARM/Bicep deployments, and the rest of the behavioral/real-delivery
+layer inspired by gcp-emulator's own Phase 11).
 
 | Phase | Area | What's implemented |
 |---|---|---|
@@ -43,6 +42,7 @@ Phase 11).
 | 15 | Entra ID & RBAC | App registrations, service principals, custom role definitions, role assignments (scope-isolated subscription/resource-group storage) — no real directory or authorization evaluation |
 | 16 | Managed Identities | User-assigned identities (`Microsoft.ManagedIdentity/userAssignedIdentities`, ARM CRUD, sync), `identity.type=SystemAssigned` sub-object on App Service sites, VMs, and AKS clusters — deterministic fake `tenantId`/`principalId`/`clientId` |
 | 17 | Eventing | Event Grid topics + event subscriptions (ARM CRUD, sync; real webhook delivery on publish) and publish (data-plane); Event Hubs namespaces (ARM CRUD, async), event hubs + consumer groups (ARM CRUD, sync), send/receive (data-plane, simplified) |
+| 18 | API Management | Service instance (ARM CRUD, async, always succeeds), APIs + operations (ARM CRUD, sync sub-resources), products + subscriptions (ARM CRUD, sync) — deterministic fake gateway URLs and subscription keys, no real proxying/policy evaluation |
 | 20 | Action Groups: real webhook delivery | `POST .../actionGroups/{name}/createNotifications` dispatches a real HTTP POST to each `webhookReceivers` entry; result recorded via `lastNotificationTime`/`lastNotificationStatus` (emulator-only fields) |
 
 ### Feature matrix (detail)
@@ -127,6 +127,13 @@ Phase 11).
   hubs + consumer groups (ARM CRUD, sync), ✅ send/receive (data-plane,
   simplified flat offset-ordered log — no real partitioning/
   checkpointing).
+- **API Management**: ✅ service instance (ARM CRUD, async; always
+  succeeds, deterministic fake `gatewayUrl`/`portalUrl`/
+  `developerPortalUrl`/`managementApiUrl`/`scmUrl`), ✅ APIs + operations
+  (ARM CRUD, sync sub-resources), ✅ products + subscriptions (ARM CRUD,
+  sync; deterministic fake `primaryKey`/`secondaryKey`) — deleting the
+  service instance cascades over all its APIs/products/subscriptions;
+  no real request proxying or policy evaluation.
 - **Action Groups real webhook delivery (Phase 20)**: ✅
   `POST .../actionGroups/{name}/createNotifications` sends a real HTTP
   POST (Azure common-alert-schema-shaped JSON body) to every
@@ -162,6 +169,7 @@ internal/services/authorization/  Microsoft.Authorization/roleDefinitions + role
 internal/services/managedidentity/  Microsoft.ManagedIdentity/userAssignedIdentities (ARM CRUD, sync)
 internal/services/eventgrid/    Microsoft.EventGrid/topics + eventSubscriptions (ARM CRUD, sync) + publish (path-style {topic}.eventgrid/ data-plane, real webhook delivery)
 internal/services/eventhub/     Microsoft.EventHub/namespaces (ARM CRUD, async) + eventhubs/consumergroups (ARM CRUD, sync) + send/receive (path-style {namespace}.eventhub/ data-plane)
+internal/services/apimanagement/  Microsoft.ApiManagement/service (ARM CRUD, async) + apis/operations, products/subscriptions sub-resources (ARM CRUD, sync)
 internal/devtls/                self-signed TLS certificate generation/caching for the optional -tls flag
 web/console/                     minimal vanilla-JS web console (no build step), served by the binary itself
 docs/                            banner and other documentation assets
@@ -362,6 +370,13 @@ This exercises, end to end against a running emulator instance:
   Hubs namespace create (async)/get; event hub put/get; consumer group
   put/get; send (data-plane) followed by receive via both the direct
   `{hub}/messages` path and the consumer-group path; cleanup deletes.
+- **API Management**: service instance create (async)/get/list; API
+  put/get; operation put/get/list; product put; product-API
+  association put/get/list; subscription put/get (confirming
+  non-empty, deterministic `primaryKey`/`secondaryKey`); cleanup
+  deletes in reverse dependency order, including a full
+  service-instance delete cascading over its remaining
+  APIs/products/subscriptions.
 
 ### Terraform (generic `http` provider)
 
@@ -392,14 +407,17 @@ definition, and role assignments at both subscription and
 resource-group scope); a user-assigned managed identity; and Eventing
 (an Event Grid topic + event subscription with a webhook destination
 + publish, and an Event Hubs namespace + event hub + consumer group +
-send). It then reads each one back via `data "http"` blocks and
-exposes the parsed JSON as outputs — including a
-`role_assignments_sub_list` data source confirming the
-subscription-scope list excludes the resource-group-scope assignment,
-and an `eh_receive_response` data source confirming a roundtrip
-send/receive on the event hub. Confirmed via a full `apply`/`destroy`
-cycle: 55 resources applied and destroyed cleanly against a live
-emulator instance.
+send); and API Management (a service instance + API + operation +
+product + product-API association + subscription). It then reads
+each one back via `data "http"` blocks and exposes the parsed JSON as
+outputs — including a `role_assignments_sub_list` data source
+confirming the subscription-scope list excludes the
+resource-group-scope assignment, an `eh_receive_response` data source
+confirming a roundtrip send/receive on the event hub, and an
+`apim_subscription_response` data source confirming the subscription's
+`scope` matches the product's resource ID. Confirmed via a full
+`apply`/`destroy` cycle: 61 resources applied and destroyed cleanly
+against a live emulator instance.
 
 ### Terraform with the real `azurerm` provider
 

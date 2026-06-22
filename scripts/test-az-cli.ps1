@@ -923,6 +923,78 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $EhNsBodyFile -ErrorAction SilentlyContinue
 
+$ApiApim = "2022-08-01"
+$ApimSvc = "smoketestapim"
+$ApimApi = "echo"
+$ApimOp = "get-echo"
+$ApimProduct = "starter"
+$ApimSub = "starter-sub"
+$ApimProductId = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/products/$ApimProduct"
+
+$ApimSvcBodyFile = New-TemporaryFile
+$ApimApiBodyFile = New-TemporaryFile
+$ApimOpBodyFile = New-TemporaryFile
+$ApimProductBodyFile = New-TemporaryFile
+$ApimSubBodyFile = New-TemporaryFile
+"{`"location`": `"$Location`", `"sku`": {`"name`": `"Developer`", `"capacity`": 1}, `"properties`": {`"publisherEmail`": `"admin@example.com`", `"publisherName`": `"Contoso`"}}" | Set-Content -NoNewline -Path $ApimSvcBodyFile
+'{"properties": {"displayName": "Echo API", "path": "echo", "serviceUrl": "https://backend.example.com"}}' | Set-Content -NoNewline -Path $ApimApiBodyFile
+'{"properties": {"displayName": "GET echo", "method": "GET", "urlTemplate": "/{id}"}}' | Set-Content -NoNewline -Path $ApimOpBodyFile
+'{"properties": {"displayName": "Starter"}}' | Set-Content -NoNewline -Path $ApimProductBodyFile
+"{`"properties`": {`"displayName`": `"Starter subscription`", `"scope`": `"$ApimProductId`"}}" | Set-Content -NoNewline -Path $ApimSubBodyFile
+
+Write-Host "-- PUT API Management service instance (async, 202 con cuerpo) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc`?api-version=$ApiApim" --body "@$ApimSvcBodyFile"
+
+Write-Host "-- GET API Management service instance (gatewayUrl/portalUrl deterministas) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc`?api-version=$ApiApim"
+
+Write-Host "-- LIST API Management service instances --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service`?api-version=$ApiApim"
+
+Write-Host "-- PUT API (sub-recurso, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/apis/$ApimApi`?api-version=$ApiApim" --body "@$ApimApiBodyFile"
+
+Write-Host "-- GET API --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/apis/$ApimApi`?api-version=$ApiApim"
+
+Write-Host "-- PUT API operation (sub-sub-recurso, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/apis/$ApimApi/operations/$ApimOp`?api-version=$ApiApim" --body "@$ApimOpBodyFile"
+
+Write-Host "-- GET API operation --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/apis/$ApimApi/operations/$ApimOp`?api-version=$ApiApim"
+
+Write-Host "-- PUT product (sub-recurso, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/products/$ApimProduct`?api-version=$ApiApim" --body "@$ApimProductBodyFile"
+
+Write-Host "-- PUT product-api association --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/products/$ApimProduct/apis/$ApimApi`?api-version=$ApiApim"
+
+Write-Host "-- GET product (debe seguir existiendo tras la asociación) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/products/$ApimProduct`?api-version=$ApiApim"
+
+Write-Host "-- PUT subscription (primaryKey/secondaryKey deterministas) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/subscriptions/$ApimSub`?api-version=$ApiApim" --body "@$ApimSubBodyFile"
+
+Write-Host "-- GET subscription --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/subscriptions/$ApimSub`?api-version=$ApiApim"
+
+Write-Host "-- DELETE subscription --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/subscriptions/$ApimSub`?api-version=$ApiApim"
+
+Write-Host "-- DELETE product --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/products/$ApimProduct`?api-version=$ApiApim"
+
+Write-Host "-- DELETE API operation --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/apis/$ApimApi/operations/$ApimOp`?api-version=$ApiApim"
+
+Write-Host "-- DELETE API --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc/apis/$ApimApi`?api-version=$ApiApim"
+
+Write-Host "-- DELETE API Management service instance (async, 202; cascada sobre cualquier sub-recurso restante) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ApiManagement/service/$ApimSvc`?api-version=$ApiApim"
+
+Remove-Item -Force $ApimSvcBodyFile, $ApimApiBodyFile, $ApimOpBodyFile, $ApimProductBodyFile, $ApimSubBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 
