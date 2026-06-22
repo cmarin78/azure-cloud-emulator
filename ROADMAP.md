@@ -70,7 +70,14 @@ done: app registrations and service principals (Microsoft Graph stub,
 extending Phase 8) plus custom role definitions and role assignments
 (`Microsoft.Authorization`, with scope-isolated subscription/
 resource-group storage) are implemented. See the table below for the
-per-phase breakdown.
+per-phase breakdown. Phases 16-19 below extend the existing
+shape-compatible coverage (identities, eventing, API Management, ARM/
+Bicep deployments); Phases 20-22 are a newer plan to layer some real
+*behavior* on top of specific already-shape-only resources, inspired
+by a direct review of gcp-emulator's own Phase 11 ("behavioral logic
+layer" — real Pub/Sub push, Cloud Scheduler firing, Cloud Tasks
+dispatch) and Phase 12 (pluggable real-execution backends) — see those
+phases for the rationale and the concrete patterns being ported.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -574,18 +581,27 @@ Phases 15/16 land.
 
 | Service | Minimum resources | Effort | Status |
 |---|---|---|---|
-| Event Grid | topics (ARM CRUD, sync), event subscriptions (ARM CRUD, sync, webhook/queue endpoint reference only, no real delivery), publish (data-plane, sync, just validates+discards the event) | M | planned |
+| Event Grid | topics (ARM CRUD, sync), event subscriptions (ARM CRUD, sync, webhook endpoint reference), publish (data-plane, sync) — **real webhook delivery on publish**, see below | M | planned |
 | Event Hubs | namespaces (ARM CRUD, async), event hubs + consumer groups (ARM CRUD, sync), send/receive (data-plane, simplified — no real partitioning/checkpointing) | M | planned |
 
 Mirrors Service Bus's split (Phase 6): namespace-level resources are
 async (matching real Azure's LRO pattern for both Event Hubs
 namespaces and Service Bus namespaces), child resources are sync.
-Event Grid event delivery and Event Hubs partitioning/checkpointing
-are both out of scope — "shape-compatible, not behavior-complete",
-same as every other messaging/eventing resource in this project; the
-goal is that `azurerm_eventgrid_topic`/`azurerm_eventhub_namespace`
-and friends can be provisioned and destroyed, not that events actually
-flow end to end.
+
+Updated scope (revised after reviewing gcp-emulator's Phase 11
+"behavioral logic layer"): Event Grid event subscriptions with a
+webhook `endpointType` should deliver **real** HTTP POSTs on publish,
+not just validate-and-discard. This is a direct port of the pattern
+gcp-emulator already shipped for Pub/Sub push delivery
+(`internal/services/pubsub`'s `deliverPush`) — a `*http.Client` with a
+short timeout, a fire-and-forget goroutine per publish, the standard
+EventGridEvent/CloudEvents JSON wire shape, no retry or
+dead-lettering (documented limitation, same as gcp-emulator's). No new
+runtime dependency. Event Hubs partitioning/checkpointing remains
+explicitly out of scope — there's no equivalent shipped pattern to
+draw from yet, and real partition/offset semantics are a much larger
+undertaking than a single webhook POST. See Phase 20 below for the
+equivalent upgrade to the already-implemented Monitor action groups.
 
 ## Phase 18 — API Management 🔜 planned
 
@@ -628,6 +644,89 @@ resolved resource to its existing service package's internal PUT
 logic. `what-if` is out of scope (it requires diffing against current
 state in a way none of the other phases need); `validate` always
 returns success.
+
+## Phase 20 — Action Groups: real webhook delivery 🔜 planned
+
+Standalone upgrade to the already-implemented Phase 10 `monitor`
+package — no new package, no new ARM resource. Smallest and
+lowest-risk step in the behavioral-layer plan below, since the shape
+(`ActionGroupProperties.WebhookReceivers`) already exists and is
+already persisted; only the dispatch is missing.
+
+| Component | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| `dispatch()` real HTTP POST to each `webhookReceivers` entry | Action groups (Phase 10) | Today the comment in `actiongroups.go` says explicitly "no se envía ninguna notificación real" — this closes that gap for the webhook receiver type only (email/SMS/Azure Function receivers stay shape-only, same as today) | S | planned |
+| `POST .../actionGroups/{name}:fireTestNotification` (sync action) | `dispatch()` above | Mirrors the real Azure Monitor API's own test-notification action — the natural trigger point, since there's no real metrics pipeline to fire an action group automatically (metric alert `criteria` is still never evaluated, same as Phase 10) | S | planned |
+
+Directly modeled on gcp-emulator's Cloud Tasks `dispatchTask`/Cloud
+Scheduler `dispatch` (`internal/services/cloudtasks`,
+`internal/services/cloudscheduler`): a package-level `httpClient :=
+&http.Client{Timeout: 10 * time.Second}`, a `go s.dispatch(...)` so the
+HTTP call never blocks the response, and the result (success/`http
+4xx-5xx`/network error) is worth recording somewhere visible — this
+emulator doesn't have gcp-emulator's `internal/activity` (a shared
+Logging+Monitoring event sink), so the simplest option is to just
+extend the existing `ActionGroup`/fire-result with a `lastFireTime`/
+`lastFireStatus` field, deferring a real activity-log sink to Phase 22
+or later. No retry, no dead-lettering — explicit documented limitation,
+same convention used everywhere else in this project (Key Vault's
+simulated crypto, AKS's unevaluated `provisioningState`).
+
+## Phase 21 — Scheduler-equivalent: Logic App Recurrence trigger 🔜 planned
+
+Net-new service — unlike Phase 20, there's no existing azure-emulator
+resource to extend, and unlike Event Grid (Phase 17), there's no
+already-planned shape-only phase to upgrade. This is the Azure
+analog of gcp-emulator's Cloud Scheduler, and is scoped narrowly on
+purpose: real Logic Apps have dozens of trigger/action types and a
+full designer-driven workflow language, none of which is in scope
+here.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| New `internal/cronlike` package: minimal recurrence evaluator (interval + frequency: Second/Minute/Hour/Day/Week/Month, optional `startTime`) | — | Reimplementation (not a copy) of gcp-emulator's `internal/cronexpr`, adapted to Logic Apps' `recurrence` object shape (`{"frequency": "Hour", "interval": 1}`) instead of 5-field unix-cron, since that's the shape `azurerm_logic_app_workflow`/ARM actually send | M | planned |
+| `Microsoft.Logic/workflows` (ARM CRUD, sync) — Consumption plan only, `definition.triggers` restricted to a single `Recurrence` trigger, `definition.actions` restricted to a single `Http` action | recurrence evaluator above | `azurerm_logic_app_workflow`; the minimum shape that lets a workflow be provisioned and have something real happen | M | planned |
+| Per-workflow firing goroutine, resume-on-restart from BoltDB state | workflows above | Same pattern as gcp-emulator's Cloud Scheduler `startFiring`/`stopFiring`/`fireLoop`: a `map[string]chan struct{}` of stop signals, relaunched in `New()` for every workflow whose state is enabled | M | planned |
+| `POST .../workflows/{name}/triggers/{trigger}/run` (manual trigger action) | workflows above | Mirrors Cloud Scheduler's `:run` — lets the az CLI/Terraform smoke tests fire a workflow on demand instead of waiting for the schedule | S | planned |
+
+Any `actions` entry beyond a single `Http` action stays unparsed
+passthrough JSON, same "shape-compatible, not behavior-complete"
+convention used for AKS/Key Vault — this phase is not a workflow
+interpreter, just enough to prove a recurrence trigger really fires an
+HTTP call on schedule. `enabled`/disabled workflows reuse the
+pause/resume semantics already established by AKS agent pool actions
+and App Service's start/stop/restart. Considered and rejected:
+piggybacking on Service Bus or Event Grid instead of a new package —
+neither's real Azure API exposes a cron-like recurrence concept, so
+forcing one in would misrepresent the real service's shape, which
+this project has consistently avoided (see the no-referential-integrity
+convention notes throughout Phases 10-15).
+
+## Phase 22 — Pluggable real-execution backends 💭 proposed (not yet planned)
+
+Large, optional, and explicitly lower-confidence than Phases 16-21 —
+this mirrors gcp-emulator's own "Phase 12" status (proposed, not
+committed) for the same reason: it's the first phase in this project
+that would make Docker a *meaningful* (if still optional) part of the
+runtime story, which is a bigger architectural commitment than
+anything shipped so far.
+
+Proposed shape, subject to revision before any implementation starts:
+
+| Component | Why | Effort | Status |
+|---|---|---|---|
+| Per-resource `backend=real` opt-in (query param or a tag/label convention) | Keeps the default zero-dependency behavior; nothing breaks for anyone not opting in, same philosophy as `-tls` being optional | M | proposed |
+| Docker-engine detection at startup, automatic fallback to shape-only if absent | Never makes Docker mandatory, never fails silently — matches gcp-emulator's stated design goal for its own equivalent feature | S | proposed |
+| Real backend candidate 1: App Service/Function Apps → `docker run` the user's container image, fronted by a reverse proxy | The most natural fit — `azurerm_linux_web_app`'s `application_stack.docker_image_name` already names a real image; today it's just persisted and never run | L | proposed |
+| Real backend candidate 2: a real embedded Postgres for an eventual Azure Database for PostgreSQL Flexible Server resource (not yet on this roadmap at all) | Mirrors gcp-emulator's committed Cloud SQL/Postgres scope; would need that ARM resource type added first since this project has no Postgres-shaped service yet | L | proposed |
+| Resource governor (idle backend eviction, `EMULATOR_MAX_REAL_BACKENDS` override) | Without this, a long-running emulator with several `backend=real` resources could exhaust the host's RAM | M | proposed |
+
+This phase is intentionally written as a proposal, not a committed
+plan — it should be revisited (and likely re-scoped down, the same way
+gcp-emulator's own committed real-execution scope ended up smaller
+than its Phase 12 brainstorm) once Phases 16-21 are done and there's a
+clearer sense of whether real-execution depth is actually the
+highest-value next investment versus more resource-type breadth.
 
 ## Maintenance / cross-cutting (no fixed phase number)
 

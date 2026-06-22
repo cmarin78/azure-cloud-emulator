@@ -18,74 +18,29 @@ their endpoints to `localhost`.
 
 ## Current status
 
-Phase 1 (core server) and Phase 2 (Resource Manager basics) are done:
-HTTP router with logging/recover/CORS middleware, ARM resource-ID
-parsing, `api-version` validation, an async-operation (LRO) helper
-matching `Azure-AsyncOperation`/`Location` polling, embedded BoltDB
-persistence, a `/healthz` endpoint, fake subscriptions, and resource
-group CRUD (create/update, get, list, async delete). Phase 3 (Storage)
-is done: storage account ARM CRUD, blob containers/blobs, queue
-storage, and table storage (all data-plane) are implemented. Phase 4
-(Compute) is done: virtual networks/subnets, network interfaces,
-managed disks, a static VM image catalog, and virtual machines
-(create/get/delete, start/stop, all async) are implemented. Phase 5
-(Key Vault) is done: vault ARM CRUD plus secrets/keys/certificates
-(all data-plane, with simulated cryptographic material) are
-implemented. Phase 6 (Service Bus + Cosmos DB) is done: Service Bus
-namespaces (ARM, async), queues and topics/subscriptions (ARM, sync)
-plus message send/peek-lock-receive/complete (data-plane); Cosmos DB
-SQL API accounts (ARM, async), databases and containers (ARM, sync)
-plus document CRUD (data-plane). Phase 7 (Web console) is done: a
-minimal vanilla-JS console (`web/console`, no build step) is served by
-the binary itself for browsing resource groups, storage accounts,
-virtual machines, Key Vault vaults, Service Bus namespaces, and Cosmos
-DB accounts — see "Web console" below. Phase 8 (real `az`/`azurerm`
-compatibility) is done: a fake ARM metadata endpoint
-(`/metadata/endpoints`), a fake Azure AD token issuer
-(`/login/{tenant}/oauth2/v2.0/token`), a minimal Microsoft Graph stub
-(`GET /v1.0/servicePrincipals`), the `providers` registration endpoint,
-optional self-signed HTTPS (`-tls`), and a path-normalization
-middleware (so ARM's case-insensitive literal segments like
-`resourceGroups` match regardless of how a client capitalizes them)
-together let the real `azurerm` Terraform provider point at this
-emulator directly — see "Testing with az CLI and Terraform" below for
-the working end-to-end flow and the one known limitation (az CLI
-itself). Phase 9 (automated test suite + CI) is done: every service
-package has a Go test file exercising its ARM CRUD and data-plane
-behavior, `cmd/azure-emulator` has a test that reproduces `main()`'s
-full service-registration wiring to catch `http.ServeMux` route
-conflicts, and GitHub Actions runs build/vet/test on every push and
-pull request — see "Running tests" below. Phase 10 (Monitor + Log
-Analytics) is done: Log Analytics workspaces (ARM CRUD, sync, plus a
-`sharedKeys` action and a data-plane Log Analytics Query stub), action
-groups (ARM CRUD, sync), and metric alerts (ARM CRUD, sync) are
-implemented. Phase 11 (App Service) is done: App Service Plans (ARM
-CRUD, sync) and Web Apps (ARM CRUD, sync, plus start/stop/restart
-actions and a `config/appsettings` StringDictionary sub-resource) are
-implemented. Phase 12 (Networking) is done: Network Security Groups +
-security rules, Public IP addresses, Load Balancers, Route Tables +
-routes, and Private DNS zones + record sets (all ARM CRUD, sync) are
-implemented, alongside the existing VNet/subnet/NIC resources from
-Phase 4. Phase 13 (AKS) is done: managed clusters (ARM CRUD, async,
-including a synthesized default agent pool) and agent pools (ARM CRUD,
-async, independently routable sub-resource) plus
-`listClusterUserCredential`/`listClusterAdminCredential` (sync, fake
-base64 kubeconfig) are implemented — shape-compatible only, there is
-no real Kubernetes control plane behind it. Phase 14 (Functions) is
-done: function definitions (ARM CRUD, sync, sub-resource of an App
-Service site) plus `syncfunctiontriggers` and `host/default/listkeys`
-actions are implemented — a Function App itself is just a
-`Microsoft.Web/sites` resource with `kind="functionapp[,linux]"`,
-already fully supported by Phase 11's App Service implementation with
-no changes. Phase 15 (Entra ID & RBAC) is done: app registrations and
-service principals (extending the Phase 8 Microsoft Graph stub) plus
-custom role definitions and role assignments
-(`Microsoft.Authorization`, ARM CRUD, sync, with scope-isolated
-subscription/resource-group storage so a subscription-scope list never
-leaks a resource-group-scope assignment) are implemented. See
-[ROADMAP.md](ROADMAP.md) for the next phases.
+All 15 phases below are complete. See [ROADMAP.md](ROADMAP.md) for what's
+planned next (including a behavioral/real-delivery layer inspired by
+gcp-emulator's own Phase 11).
 
-Planned scope (subject to change as work progresses):
+| Phase | Area | What's implemented |
+|---|---|---|
+| 1 | Core server | HTTP router (logging/recover/CORS middleware), ARM resource-ID parsing, `api-version` validation, async-operation (LRO) helper (`Azure-AsyncOperation`/`Location` polling), embedded BoltDB persistence, `/healthz` |
+| 2 | Resource Manager | Fake subscriptions, resource group CRUD (create/update, get, list, async delete) |
+| 3 | Storage | Storage account ARM CRUD, blob containers/blobs, queue storage, table storage (all data-plane) |
+| 4 | Compute | Virtual networks/subnets, network interfaces, managed disks, static VM image catalog, virtual machines (create/get/delete, start/stop — all async) |
+| 5 | Key Vault | Vault ARM CRUD, plus secrets/keys/certificates (data-plane, simulated cryptographic material) |
+| 6 | Service Bus + Cosmos DB | Service Bus namespaces (async), queues/topics/subscriptions (sync) + send/peek-lock-receive/complete; Cosmos DB SQL API accounts (async), databases/containers (sync) + document CRUD |
+| 7 | Web console | Minimal vanilla-JS console (`web/console`, no build step), served by the binary — resource groups, storage accounts, VMs, Key Vault vaults, Service Bus namespaces, Cosmos DB accounts |
+| 8 | az/azurerm compatibility | Fake ARM metadata endpoint, fake Azure AD token issuer, Microsoft Graph stub, `providers` registration endpoint, optional self-signed HTTPS, ARM case-insensitive path matching |
+| 9 | Test suite + CI | One `*_test.go` per service package, a `cmd/azure-emulator` registration test (catches route conflicts), GitHub Actions CI |
+| 10 | Monitor + Log Analytics | Log Analytics workspaces (+ `sharedKeys`, + Query data-plane stub), action groups, metric alerts (all ARM CRUD, sync) |
+| 11 | App Service | App Service Plans, Web Apps (+ start/stop/restart, `config/appsettings` sub-resource) |
+| 12 | Networking | NSGs + security rules, Public IP addresses, Load Balancers, Route Tables + routes, Private DNS zones + record sets |
+| 13 | AKS | Managed clusters + agent pools (async), `listClusterUserCredential`/`listClusterAdminCredential` — shape-compatible only, no real Kubernetes control plane |
+| 14 | Functions | Function definitions, `syncfunctiontriggers`, `host/default/listkeys` — reuses Phase 11's App Service site, no new resource type needed |
+| 15 | Entra ID & RBAC | App registrations, service principals, custom role definitions, role assignments (scope-isolated subscription/resource-group storage) — no real directory or authorization evaluation |
+
+### Feature matrix (detail)
 
 - **Storage**: ✅ storage accounts (ARM CRUD), ✅ blob containers/blobs
   (data-plane: create/list/get/delete containers, upload/download/list/
@@ -295,17 +250,19 @@ on every push and pull request.
 Every service ships with a way to exercise it from real tooling, not just
 `curl`.
 
-**az CLI** — az CLI normally expects to discover ARM metadata and
-authenticate against real Azure AD before issuing any request. As of
-Phase 8 the emulator implements both (`/metadata/endpoints` and a fake
-token issuer), and `az cloud register`/`az login --service-principal`
-against a `custom` cloud pointed at the emulator gets as far as the
-token request — but MSAL's "instance discovery" check rejects
-`localhost` as an authority before that, with no flag to disable it in
-current az CLI versions. This is a known limitation of the az CLI
-client itself, not of the emulator's endpoints (the `azurerm` Terraform
-provider doesn't have this problem — see below). Until/unless that's
-worked around, the practical way to drive the emulator from az CLI is
+### az CLI
+
+az CLI normally expects to discover ARM metadata and authenticate
+against real Azure AD before issuing any request. As of Phase 8 the
+emulator implements both (`/metadata/endpoints` and a fake token
+issuer), and `az cloud register`/`az login --service-principal` against
+a `custom` cloud pointed at the emulator gets as far as the token
+request — but MSAL's "instance discovery" check rejects `localhost` as
+an authority before that, with no flag to disable it in current az CLI
+versions. This is a known limitation of the az CLI client itself, not
+of the emulator's endpoints (the `azurerm` Terraform provider doesn't
+have this problem — see below). Until/unless that's worked around, the
+practical way to drive the emulator from az CLI is
 [`az rest`](https://learn.microsoft.com/cli/azure/reference-index#az-rest),
 which reuses your cached `az login` token (from a real tenant) but lets
 you target any URL, including `localhost`:
@@ -315,55 +272,60 @@ az login                       # once, any account/tenant works
 ./scripts/test-az-cli.sh       # or test-az-cli.ps1 on Windows
 ```
 
-This exercises subscription auto-vivification, resource group CRUD,
-storage account CRUD, blob container/blob CRUD (create container,
-upload/list/download/delete blob, delete container), queue storage
-(create queue, put/peek/get(dequeue)/delete message, delete queue),
-table storage (create table, insert/get/query/merge/delete entity,
-delete table), and Compute/Network (virtual network + subnet CRUD,
-network interface CRUD, managed disk CRUD, VM image catalog lookup,
-virtual machine create/get/start/powerOff/delete — confirming the VM
-response never echoes back `adminPassword`), Key Vault (vault
-create/get/list/delete, secret put/get/list (list never echoes back
-`value`)/delete, key put/get/list/delete, certificate put/get/list/
-delete), Service Bus (namespace create/get/delete, queue create/delete,
-message send/peek-lock-receive/complete, topic + subscription create/
-delete with fan-out send/receive), Cosmos DB (account create/get/
-delete, SQL database create/delete, container create/delete, document
-put/get/list/delete), and Monitor/Log Analytics (workspace create/get/
-list/delete, `sharedKeys` action, Log Analytics Query stub, action
-group create/get/list/delete, metric alert create/get/list/delete),
-and App Service (App Service Plan create/get/list/delete, Web App
-create/get/list/delete referencing a plan by id, app settings put/get
-(StringDictionary, full replace), start/stop/restart actions), and
-Networking (NSG create/get/delete, security rule put/get/delete
-(rejecting an out-of-range priority), Public IP create/get/update/
-delete (deterministic fake IP, preserved across updates), Load
-Balancer create/get/delete referencing a Public IP by id plus inline
-frontend/backend/rule, Route Table create/get/delete, route put/get/
-delete (rejecting an unrecognized `nextHopType`), and Private DNS zone
-create/get/delete plus A record put/get/delete), and AKS (managed
-cluster create (async)/get (synthesized default agent pool + fake
-`fqdn`)/list, agent pool put (async)/get/list (default + the new pool,
-both reflected on the parent cluster's `agentPoolProfiles`),
-`listClusterUserCredential` (base64 kubeconfig), agent pool delete,
-and managed cluster delete cascading over any remaining agent pools),
-and Functions (App Service Plan Y1/Dynamic create, Function App
-create (`kind=functionapp,linux`, reusing the existing `appservice`
-implementation), function definition put/get/list, `syncfunctiontriggers`
-(204, no body), `host/default/listkeys` (non-empty `masterKey`), and
-cleanup deletes of the function/app/plan), and Entra ID & RBAC
-(application create/get, service principal create plus `$filter`
-auto-discovery, role definition put/get/list, role assignment put/get
-at both subscription and resource-group scope — confirming a
-subscription-scope list never includes a resource-group-scope
-assignment — and cleanup deletes of the role assignments, role
-definition, service principal, and application) end to end against a
-running emulator instance.
+This exercises, end to end against a running emulator instance:
 
-**Terraform** — `terraform/smoke-test/` uses the generic `http` provider
-plus `local-exec` to verify every REST endpoint responds with the
-expected shape, independent of any auth flow:
+- **Resource Manager**: subscription auto-vivification, resource group CRUD.
+- **Storage**: storage account CRUD; blob container/blob create/upload/
+  list/download/delete; queue create/put/peek/get(dequeue)/delete/delete
+  queue; table create/insert/get/query/merge/delete entity/delete table.
+- **Compute/Network**: virtual network + subnet CRUD, network interface
+  CRUD, managed disk CRUD, VM image catalog lookup, virtual machine
+  create/get/start/powerOff/delete — confirming the response never
+  echoes back `adminPassword`.
+- **Key Vault**: vault create/get/list/delete; secret put/get/list (list
+  never echoes back `value`)/delete; key put/get/list/delete;
+  certificate put/get/list/delete.
+- **Service Bus**: namespace create/get/delete; queue create/delete;
+  message send/peek-lock-receive/complete; topic + subscription create/
+  delete with fan-out send/receive.
+- **Cosmos DB**: account create/get/delete; SQL database create/delete;
+  container create/delete; document put/get/list/delete.
+- **Monitor/Log Analytics**: workspace create/get/list/delete,
+  `sharedKeys` action, Log Analytics Query stub, action group create/
+  get/list/delete, metric alert create/get/list/delete.
+- **App Service**: App Service Plan create/get/list/delete; Web App
+  create/get/list/delete (referencing a plan by id); app settings put/
+  get (StringDictionary, full replace); start/stop/restart actions.
+- **Networking**: NSG create/get/delete; security rule put/get/delete
+  (rejecting an out-of-range priority); Public IP create/get/update/
+  delete (deterministic fake IP, preserved across updates); Load
+  Balancer create/get/delete (referencing a Public IP by id plus inline
+  frontend/backend/rule); Route Table create/get/delete; route put/get/
+  delete (rejecting an unrecognized `nextHopType`); Private DNS zone
+  create/get/delete plus A record put/get/delete.
+- **AKS**: managed cluster create (async)/get (synthesized default
+  agent pool + fake `fqdn`)/list; agent pool put (async)/get/list
+  (default + the new pool, both reflected on the parent cluster's
+  `agentPoolProfiles`); `listClusterUserCredential` (base64 kubeconfig);
+  agent pool delete; managed cluster delete cascading over any
+  remaining agent pools.
+- **Functions**: App Service Plan Y1/Dynamic create; Function App
+  create (`kind=functionapp,linux`, reusing the existing `appservice`
+  implementation); function definition put/get/list;
+  `syncfunctiontriggers` (204, no body); `host/default/listkeys`
+  (non-empty `masterKey`); cleanup deletes of the function/app/plan.
+- **Entra ID & RBAC**: application create/get; service principal create
+  plus `$filter` auto-discovery; role definition put/get/list; role
+  assignment put/get at both subscription and resource-group scope —
+  confirming a subscription-scope list never includes a
+  resource-group-scope assignment; cleanup deletes of the role
+  assignments, role definition, service principal, and application.
+
+### Terraform (generic `http` provider)
+
+`terraform/smoke-test/` uses the generic `http` provider plus
+`local-exec` to verify every REST endpoint responds with the expected
+shape, independent of any auth flow:
 
 ```bash
 cd terraform/smoke-test
@@ -371,31 +333,33 @@ terraform init
 terraform apply
 ```
 
-This provisions a resource group, storage account (+ blob container/
-blob, queue + message, table + entity), virtual network/subnet/NIC/
-disk/VM, Key Vault (+ secret/key/certificate), Service Bus namespace
-(+ queue + message), Cosmos DB account (+ database/container/
-document), a Log Analytics workspace + action group + metric
-alert (referencing the action group by id), an App Service Plan +
-Web App (referencing the plan by id) + app settings, and Networking
-(NSG + security rule, Public IP, Load Balancer referencing the Public
-IP by id plus inline frontend/backend/rule, Route Table + route, and
-a Private DNS zone + A record), an AKS managed cluster + agent pool,
-and a Functions App Service Plan + Function App + function definition
-(plus a `syncfunctiontriggers` call), and Entra ID & RBAC (an
-application, a service principal, a custom role definition, and role
-assignments at both subscription and resource-group scope), against
-the running emulator, then reads each one back via `data "http"`
+This provisions, against the running emulator: a resource group;
+storage account (+ blob container/blob, queue + message, table +
+entity); virtual network/subnet/NIC/disk/VM; Key Vault (+ secret/key/
+certificate); Service Bus namespace (+ queue + message); Cosmos DB
+account (+ database/container/document); a Log Analytics workspace +
+action group + metric alert (referencing the action group by id); an
+App Service Plan + Web App (referencing the plan by id) + app
+settings; Networking (NSG + security rule, Public IP, Load Balancer
+referencing the Public IP by id plus inline frontend/backend/rule,
+Route Table + route, and a Private DNS zone + A record); an AKS
+managed cluster + agent pool; a Functions App Service Plan + Function
+App + function definition (plus a `syncfunctiontriggers` call); and
+Entra ID & RBAC (an application, a service principal, a custom role
+definition, and role assignments at both subscription and
+resource-group scope). It then reads each one back via `data "http"`
 blocks and exposes the parsed JSON as outputs — including a
 `role_assignments_sub_list` data source confirming the
 subscription-scope list excludes the resource-group-scope assignment.
 
-**Terraform with the real `azurerm` provider** — `terraform/azurerm-smoke-test/`
-points the actual `hashicorp/azurerm` provider at the emulator (not the
-generic `http` provider) via `environment = "custom"` +
-`metadata_host`, confirming full ARM metadata discovery, AAD token
-issuance, service-principal object-ID resolution (Microsoft Graph), and
-resource create/destroy all work end to end:
+### Terraform with the real `azurerm` provider
+
+`terraform/azurerm-smoke-test/` points the actual `hashicorp/azurerm`
+provider at the emulator (not the generic `http` provider) via
+`environment = "custom"` + `metadata_host`, confirming full ARM
+metadata discovery, AAD token issuance, service-principal object-ID
+resolution (Microsoft Graph), and resource create/destroy all work end
+to end:
 
 ```bash
 go run ./cmd/azure-emulator -tls   # see "Enabling HTTPS" above — required
