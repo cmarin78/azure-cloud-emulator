@@ -106,6 +106,7 @@ type ProviderResourceType struct {
 var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.Resources", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "resourceGroups", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "deployments", Locations: []string{"eastus", "westus2"}},
 	}},
 	{Namespace: "Microsoft.Storage", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "storageAccounts", Locations: []string{"eastus", "westus2"}},

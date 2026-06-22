@@ -1104,6 +1104,44 @@ echo "-- DELETE API Management service instance (async, 202; cascada sobre cualq
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_SVC}?api-version=${API_APIM}"
 
+API_DEPLOYMENTS="2021-04-01"
+DEPLOYMENT="smoketest-deployment"
+DEPLOY_STORAGE="smoketestdeploystg"
+
+echo "-- PUT deployment ARM (dispatcher: crea una storage account real vía parameters()/variables()/resourceId()) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Resources/deployments/${DEPLOYMENT}?api-version=${API_DEPLOYMENTS}" \
+  --body "{\"properties\": {\"mode\": \"Incremental\", \"template\": {\"parameters\": {\"storageName\": {\"type\": \"string\", \"defaultValue\": \"${DEPLOY_STORAGE}\"}}, \"variables\": {\"skuName\": \"Standard_LRS\"}, \"resources\": [{\"type\": \"Microsoft.Storage/storageAccounts\", \"apiVersion\": \"${API_STORAGE}\", \"name\": \"[parameters('storageName')]\", \"location\": \"eastus\", \"sku\": {\"name\": \"[variables('skuName')]\"}}], \"outputs\": {\"storageId\": {\"type\": \"string\", \"value\": \"[resourceId('Microsoft.Storage/storageAccounts', parameters('storageName'))]\"}}}, \"parameters\": {}}}"
+
+echo "-- GET deployment (provisioningState debe ser Succeeded) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Resources/deployments/${DEPLOYMENT}?api-version=${API_DEPLOYMENTS}"
+
+echo "-- LIST deployment operations (una entrada Succeeded por el recurso despachado) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Resources/deployments/${DEPLOYMENT}/operations?api-version=${API_DEPLOYMENTS}"
+
+echo "-- GET storage account creada por el deployment (debe existir de verdad) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${DEPLOY_STORAGE}?api-version=${API_STORAGE}"
+
+echo "-- POST validate deployment (shape-only: no debe crear nada nuevo) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Resources/deployments/${DEPLOYMENT}/validate?api-version=${API_DEPLOYMENTS}" \
+  --body "{\"properties\": {\"mode\": \"Incremental\", \"template\": {\"resources\": [{\"type\": \"Microsoft.Storage/storageAccounts\", \"apiVersion\": \"${API_STORAGE}\", \"name\": \"${DEPLOY_STORAGE}\", \"location\": \"eastus\", \"sku\": {\"name\": \"Standard_LRS\"}}]}}}"
+
+echo "-- DELETE deployment (solo borra el registro del deployment, no la storage account) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Resources/deployments/${DEPLOYMENT}?api-version=${API_DEPLOYMENTS}"
+
+echo "-- GET storage account tras borrar el deployment (debe seguir existiendo) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${DEPLOY_STORAGE}?api-version=${API_STORAGE}"
+
+echo "-- DELETE storage account creada por el deployment (limpieza) --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${DEPLOY_STORAGE}?api-version=${API_STORAGE}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

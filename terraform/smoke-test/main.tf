@@ -252,6 +252,16 @@ variable "apim_subscription" {
   default = "starter-sub"
 }
 
+variable "deployment_name" {
+  type    = string
+  default = "tfsmoke-deployment"
+}
+
+variable "deployment_storage_account" {
+  type    = string
+  default = "tfsmokedeploystg"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -1091,6 +1101,28 @@ resource "null_resource" "apim_subscription" {
   }
 }
 
+# Fase 19 (ARM/Bicep deployments): Microsoft.Resources/deployments (PUT
+# asíncrono que despacha sus "resources" internamente vía el dispatcher in
+# -process — ver internal/services/deployments). El template usa
+# parameters()/variables()/resourceId() para crear una storage account real,
+# igual que TestDeploymentDispatchesResourceAndPersistsOperations en
+# internal/services/deployments/deployments_test.go. Mismo patrón
+# null_resource + local-exec del resto del archivo (el provider `http` solo
+# soporta GET). Las comillas simples literales del template ARM
+# ([parameters('x')], [resourceId(...)]) se escapan duplicándolas ('') para
+# sobrevivir dentro del string de PowerShell de un solo nivel de comillas.
+resource "null_resource" "deployment" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    deployment = var.deployment_name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Resources/deployments/${var.deployment_name}?api-version=2021-04-01' -ContentType 'application/json' -Body '{\"properties\": {\"mode\": \"Incremental\", \"template\": {\"parameters\": {\"storageName\": {\"type\": \"string\", \"defaultValue\": \"${var.deployment_storage_account}\"}}, \"variables\": {\"skuName\": \"Standard_LRS\"}, \"resources\": [{\"type\": \"Microsoft.Storage/storageAccounts\", \"apiVersion\": \"2023-01-01\", \"name\": \"[parameters(''storageName'')]\", \"location\": \"${var.location}\", \"sku\": {\"name\": \"[variables(''skuName'')]\"}}], \"outputs\": {\"storageId\": {\"type\": \"string\", \"value\": \"[resourceId(''Microsoft.Storage/storageAccounts'', parameters(''storageName''))]\"}}}, \"parameters\": {}}}'"
+  }
+}
+
 # Verificación de lectura vía el provider `http` (este sí es un GET real
 # hecho por Terraform, no un local-exec).
 data "http" "resource_group" {
@@ -1611,4 +1643,25 @@ output "apim_product_response" {
 
 output "apim_subscription_response" {
   value = jsondecode(data.http.apim_subscription.response_body)
+}
+
+# Fase 19 (ARM/Bicep deployments): verificación de lectura, mismo patrón —
+# la storage account fue creada por el dispatcher del deployment, no por un
+# null_resource propio.
+data "http" "deployment" {
+  depends_on = [null_resource.deployment]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Resources/deployments/${var.deployment_name}?api-version=2021-04-01"
+}
+
+data "http" "deployment_storage_account" {
+  depends_on = [null_resource.deployment]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Storage/storageAccounts/${var.deployment_storage_account}?api-version=2023-01-01"
+}
+
+output "deployment_response" {
+  value = jsondecode(data.http.deployment.response_body)
+}
+
+output "deployment_storage_account_response" {
+  value = jsondecode(data.http.deployment_storage_account.response_body)
 }

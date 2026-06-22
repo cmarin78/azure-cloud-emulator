@@ -995,6 +995,41 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $ApimSvcBodyFile, $ApimApiBodyFile, $ApimOpBodyFile, $ApimProductBodyFile, $ApimSubBodyFile -ErrorAction SilentlyContinue
 
+$ApiDeployments = "2021-04-01"
+$Deployment = "smoketest-deployment"
+$DeployStorage = "smoketestdeploystg"
+
+$DeploymentBodyFile = New-TemporaryFile
+$ValidateBodyFile = New-TemporaryFile
+"{`"properties`": {`"mode`": `"Incremental`", `"template`": {`"parameters`": {`"storageName`": {`"type`": `"string`", `"defaultValue`": `"$DeployStorage`"}}, `"variables`": {`"skuName`": `"Standard_LRS`"}, `"resources`": [{`"type`": `"Microsoft.Storage/storageAccounts`", `"apiVersion`": `"$ApiStorage`", `"name`": `"[parameters('storageName')]`", `"location`": `"eastus`", `"sku`": {`"name`": `"[variables('skuName')]`"}}], `"outputs`": {`"storageId`": {`"type`": `"string`", `"value`": `"[resourceId('Microsoft.Storage/storageAccounts', parameters('storageName'))]`"}}}, `"parameters`": {}}}" | Set-Content -NoNewline -Path $DeploymentBodyFile
+"{`"properties`": {`"mode`": `"Incremental`", `"template`": {`"resources`": [{`"type`": `"Microsoft.Storage/storageAccounts`", `"apiVersion`": `"$ApiStorage`", `"name`": `"$DeployStorage`", `"location`": `"eastus`", `"sku`": {`"name`": `"Standard_LRS`"}}]}}}" | Set-Content -NoNewline -Path $ValidateBodyFile
+
+Write-Host "-- PUT deployment ARM (dispatcher: crea una storage account real vía parameters()/variables()/resourceId()) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Resources/deployments/$Deployment`?api-version=$ApiDeployments" --body "@$DeploymentBodyFile"
+
+Write-Host "-- GET deployment (provisioningState debe ser Succeeded) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Resources/deployments/$Deployment`?api-version=$ApiDeployments"
+
+Write-Host "-- LIST deployment operations (una entrada Succeeded por el recurso despachado) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Resources/deployments/$Deployment/operations`?api-version=$ApiDeployments"
+
+Write-Host "-- GET storage account creada por el deployment (debe existir de verdad) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Storage/storageAccounts/$DeployStorage`?api-version=$ApiStorage"
+
+Write-Host "-- POST validate deployment (shape-only: no debe crear nada nuevo) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Resources/deployments/$Deployment/validate`?api-version=$ApiDeployments" --body "@$ValidateBodyFile"
+
+Write-Host "-- DELETE deployment (solo borra el registro del deployment, no la storage account) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Resources/deployments/$Deployment`?api-version=$ApiDeployments"
+
+Write-Host "-- GET storage account tras borrar el deployment (debe seguir existiendo) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Storage/storageAccounts/$DeployStorage`?api-version=$ApiStorage"
+
+Write-Host "-- DELETE storage account creada por el deployment (limpieza) --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Storage/storageAccounts/$DeployStorage`?api-version=$ApiStorage"
+
+Remove-Item -Force $DeploymentBodyFile, $ValidateBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

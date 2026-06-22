@@ -18,10 +18,10 @@ their endpoints to `localhost`.
 
 ## Current status
 
-All 18 core phases below are complete, plus Phase 20 (real Action Group
+All 19 core phases below are complete, plus Phase 20 (real Action Group
 webhook delivery). See [ROADMAP.md](ROADMAP.md) for what's planned next
-(ARM/Bicep deployments, and the rest of the behavioral/real-delivery
-layer inspired by gcp-emulator's own Phase 11).
+(the rest of the behavioral/real-delivery layer inspired by
+gcp-emulator's own Phase 11).
 
 | Phase | Area | What's implemented |
 |---|---|---|
@@ -43,6 +43,7 @@ layer inspired by gcp-emulator's own Phase 11).
 | 16 | Managed Identities | User-assigned identities (`Microsoft.ManagedIdentity/userAssignedIdentities`, ARM CRUD, sync), `identity.type=SystemAssigned` sub-object on App Service sites, VMs, and AKS clusters — deterministic fake `tenantId`/`principalId`/`clientId` |
 | 17 | Eventing | Event Grid topics + event subscriptions (ARM CRUD, sync; real webhook delivery on publish) and publish (data-plane); Event Hubs namespaces (ARM CRUD, async), event hubs + consumer groups (ARM CRUD, sync), send/receive (data-plane, simplified) |
 | 18 | API Management | Service instance (ARM CRUD, async, always succeeds), APIs + operations (ARM CRUD, sync sub-resources), products + subscriptions (ARM CRUD, sync) — deterministic fake gateway URLs and subscription keys, no real proxying/policy evaluation |
+| 19 | ARM/Bicep deployments | `Microsoft.Resources/deployments` (ARM CRUD, async): resolves `parameters()`/`variables()`/`resourceId()`, orders resources by `dependsOn`, dispatches each one as a synthetic PUT to its matching existing service; `/operations` (sync), `/validate` (sync, dry-run only) |
 | 20 | Action Groups: real webhook delivery | `POST .../actionGroups/{name}/createNotifications` dispatches a real HTTP POST to each `webhookReceivers` entry; result recorded via `lastNotificationTime`/`lastNotificationStatus` (emulator-only fields) |
 
 ### Feature matrix (detail)
@@ -134,6 +135,17 @@ layer inspired by gcp-emulator's own Phase 11).
   sync; deterministic fake `primaryKey`/`secondaryKey`) — deleting the
   service instance cascades over all its APIs/products/subscriptions;
   no real request proxying or policy evaluation.
+- **ARM/Bicep deployments**: ✅ `Microsoft.Resources/deployments` (ARM
+  CRUD, async) dispatches a submitted template's `resources[]` array as
+  synthetic PUTs to each resource's existing service handler, resolving
+  `parameters('x')`/`variables('x')`/`resourceId(type, name...)` and
+  ordering by `dependsOn` (cycles rejected with 400); ✅
+  `/operations` (sync, one entry per dispatched resource); ✅
+  `/validate` (sync, resolves/dispatches through the same dry-run path
+  that never persists anything) — a failed dispatched resource marks
+  the whole deployment `Failed` with a populated error, and deleting a
+  deployment removes only its own record, never the resources it
+  created; `what-if` is out of scope.
 - **Action Groups real webhook delivery (Phase 20)**: ✅
   `POST .../actionGroups/{name}/createNotifications` sends a real HTTP
   POST (Azure common-alert-schema-shaped JSON body) to every
@@ -170,6 +182,7 @@ internal/services/managedidentity/  Microsoft.ManagedIdentity/userAssignedIdenti
 internal/services/eventgrid/    Microsoft.EventGrid/topics + eventSubscriptions (ARM CRUD, sync) + publish (path-style {topic}.eventgrid/ data-plane, real webhook delivery)
 internal/services/eventhub/     Microsoft.EventHub/namespaces (ARM CRUD, async) + eventhubs/consumergroups (ARM CRUD, sync) + send/receive (path-style {namespace}.eventhub/ data-plane)
 internal/services/apimanagement/  Microsoft.ApiManagement/service (ARM CRUD, async) + apis/operations, products/subscriptions sub-resources (ARM CRUD, sync)
+internal/services/deployments/  Microsoft.Resources/deployments (ARM CRUD, async) + operations sub-resource (sync) + validate action — ARM template expression resolver + dependsOn-ordered dispatcher to other services
 internal/devtls/                self-signed TLS certificate generation/caching for the optional -tls flag
 web/console/                     minimal vanilla-JS web console (no build step), served by the binary itself
 docs/                            banner and other documentation assets
@@ -377,6 +390,13 @@ This exercises, end to end against a running emulator instance:
   deletes in reverse dependency order, including a full
   service-instance delete cascading over its remaining
   APIs/products/subscriptions.
+- **ARM/Bicep deployments**: deployment PUT (async) templating a real
+  storage account via `parameters()`/`variables()`/`resourceId()`/get
+  (`provisioningState: Succeeded`); operations list (one `Succeeded`
+  entry); GET on the dispatched storage account confirming it was
+  really created; `validate` (shape-only, creates nothing); deployment
+  delete; GET on the dispatched storage account again confirming it
+  survives the deployment delete; cleanup deletes.
 
 ### Terraform (generic `http` provider)
 
@@ -415,9 +435,12 @@ confirming the subscription-scope list excludes the
 resource-group-scope assignment, an `eh_receive_response` data source
 confirming a roundtrip send/receive on the event hub, and an
 `apim_subscription_response` data source confirming the subscription's
-`scope` matches the product's resource ID. Confirmed via a full
-`apply`/`destroy` cycle: 61 resources applied and destroyed cleanly
-against a live emulator instance.
+`scope` matches the product's resource ID; and an ARM/Bicep deployment
+(a `null_resource`+`local-exec` PUT templating a real storage account
+via `parameters()`/`variables()`/`resourceId()`, read back via
+`data.http.deployment` and `data.http.deployment_storage_account`).
+Confirmed via a full `apply`/`destroy` cycle against a live emulator
+instance.
 
 ### Terraform with the real `azurerm` provider
 
@@ -438,8 +461,11 @@ terraform destroy
 
 This requires the cert-trust steps from "Enabling HTTPS" above (Go's
 TLS stack, which `azurerm` uses, reads the OS certificate store). It
-provisions and destroys a real `azurerm_resource_group`, and reads the
-subscription via `data "azurerm_subscription"`.
+provisions and destroys a real `azurerm_resource_group` and a real
+`azurerm_resource_group_template_deployment` (templating a storage
+account via `parameters()`/`resourceId()`, dispatched through
+`internal/services/deployments`), and reads the subscription via
+`data "azurerm_subscription"`.
 
 ### Terraform usage examples
 

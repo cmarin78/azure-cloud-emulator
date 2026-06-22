@@ -34,6 +34,10 @@ terraform/smoke-test/.terraform/
 terraform/smoke-test/.terraform.lock.hcl
 terraform/smoke-test/terraform.tfstate
 terraform/smoke-test/terraform.tfstate.backup
+terraform/azurerm-smoke-test/.terraform/
+terraform/azurerm-smoke-test/.terraform.lock.hcl
+terraform/azurerm-smoke-test/terraform.tfstate
+terraform/azurerm-smoke-test/terraform.tfstate.backup
 
 # Logs locales del emulador (Windows-MCP redirection)
 *.log

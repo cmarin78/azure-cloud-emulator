@@ -20,6 +20,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
+	"github.com/cesarmarin/azure-emulator/internal/services/deployments"
 	"github.com/cesarmarin/azure-emulator/internal/services/eventgrid"
 	"github.com/cesarmarin/azure-emulator/internal/services/eventhub"
 	"github.com/cesarmarin/azure-emulator/internal/services/functions"
@@ -104,6 +105,13 @@ func main() {
 	eventHubSvc := eventhub.New(db, ops)
 	eventHubSvc.Register(srv.Mux())
 	apimanagement.New(db, ops).Register(srv.Mux())
+	// deployments despacha cada recurso de un template ARM/Bicep como una
+	// solicitud PUT sintética contra srv.Mux() (el mismo mux donde ya están
+	// registrados todos los servicios anteriores) — por eso recibe el mux
+	// tanto para despachar (in-process, sin red real) como para registrar
+	// sus propias rutas; el orden de registro no afecta el ruteo en tiempo
+	// de ejecución de http.ServeMux.
+	deployments.New(db, ops, srv.Mux()).Register(srv.Mux())
 	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc, eventGridSvc, eventHubSvc)
 
 	// Descubrimiento de metadata ARM + emisor de tokens AAD falso: permiten

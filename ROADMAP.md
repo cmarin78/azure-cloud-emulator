@@ -80,10 +80,13 @@ Management) is done: a service instance (ARM CRUD, async, same
 create-async-always-succeeds pattern as AKS) plus APIs/operations and
 products/subscriptions (sync sub-resources, with deterministic fake
 gateway URLs and subscription keys) are implemented — see Phase 18
+below for details. Phase 19 (ARM/Bicep deployments) is done: a
+`Microsoft.Resources/deployments` dispatcher that resolves a subset of
+ARM template expressions (`parameters()`/`variables()`/`resourceId()`),
+orders resources by `dependsOn`, and forwards each one as a synthetic
+PUT to the matching existing service is implemented — see Phase 19
 below for details. See the table below for the per-phase breakdown.
-Phase 19 below extends the existing shape-compatible coverage
-(ARM/Bicep deployments); Phases 20-22 are a newer plan to layer some
-real *behavior* on top of
+Phases 20-22 are a newer plan to layer some real *behavior* on top of
 specific already-shape-only resources, inspired by a direct review of
 gcp-emulator's own Phase 11 ("behavioral logic layer" — real Pub/Sub
 push, Cloud Scheduler firing, Cloud Tasks dispatch) and Phase 12
@@ -736,7 +739,7 @@ read-backs confirming the service instance's deterministic
 `gatewayUrl`, the product's id, and the subscription's `scope`
 matching the product's resource ID).
 
-## Phase 19 — ARM template / Bicep deployments 🔜 planned
+## Phase 19 — ARM template / Bicep deployments ✅ completed
 
 Cross-cutting rather than a single resource family: this phase makes
 `Microsoft.Resources/deployments` itself work, so a whole template
@@ -746,19 +749,52 @@ block.
 
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| `PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Resources/deployments/{name}` (async) | every resource type the submitted template references | `az deployment group create`; needs to parse a `resources[]` array and dispatch each entry to the matching existing service's internal handler rather than re-implementing resource creation | L | planned |
-| `GET .../deployments/{name}` + `deployments/{name}/operations` (sync) | the deployment PUT above | Terraform/az CLI poll these to know when a deployment LRO finished and to show per-resource operation results | S | planned |
-| `POST .../deployments/{name}/validate` (sync, always succeeds) | — | `az deployment group validate`/Terraform's plan-adjacent dry-run; the emulator has no real validation rules to enforce, so this is a shape-only stub | S | planned |
+| `PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Resources/deployments/{name}` (async) | every resource type the submitted template references | `az deployment group create`; needs to parse a `resources[]` array and dispatch each entry to the matching existing service's internal handler rather than re-implementing resource creation | L | done |
+| `GET .../deployments/{name}` + `deployments/{name}/operations` (sync) | the deployment PUT above | Terraform/az CLI poll these to know when a deployment LRO finished and to show per-resource operation results | S | done |
+| `POST .../deployments/{name}/validate` (sync, always succeeds) | — | `az deployment group validate`/Terraform's plan-adjacent dry-run; the emulator has no real validation rules to enforce, so this is a shape-only stub | S | done |
 
-This is the largest planned phase (`L` effort) because it's not a new
-resource type but a dispatcher: it needs to walk an arbitrary
-template's `resources[]` array, resolve simple ARM template functions
-(`resourceId()`, `parameters()`, `variables()` — a useful, deliberately
-incomplete subset) and `dependsOn` ordering, then forward each
-resolved resource to its existing service package's internal PUT
-logic. `what-if` is out of scope (it requires diffing against current
-state in a way none of the other phases need); `validate` always
-returns success.
+Implemented in a new `internal/services/deployments` package,
+registered in `cmd/azure-emulator/main.go` and `resourcemanager.go`'s
+`registeredNamespaces` (`Microsoft.Resources`, `deployments`). The
+dispatcher walks the submitted template's `resources[]` array,
+resolves a deliberately incomplete subset of ARM template expressions
+(`parameters('x')`, `variables('x')`, `resourceId(type, name...)`),
+topologically orders entries by `dependsOn` (detecting cycles as a
+400), and forwards each resolved resource as a synthetic in-process
+HTTP PUT to the matching existing service's own handler — not a
+reimplementation of resource creation. The deployment PUT itself is
+async (LRO), matching `az deployment group create`'s real behavior;
+`GET .../deployments/{name}` and `.../operations` are synchronous
+reads, and `POST .../validate` resolves/dispatches through the same
+expression-and-ordering logic but always against a dry-run path that
+never persists anything, so it can confirm template shape without
+side effects. A failed dispatched resource (e.g. a missing required
+field) marks the whole deployment `Failed` with a populated `error`
+and leaves that resource uncreated, mirroring real Azure's
+all-the-way-through failure propagation; deleting a deployment removes
+only its own record, never the resources it created — same
+purposely-narrow scope as `what-if`, which stays out of scope entirely
+(it would require diffing against current state in a way none of the
+other phases need). Confirmed via `deployments_test.go` (`httptest`,
+covering dispatch + operation persistence, `dependsOn` topological
+ordering, dependency-cycle detection, missing-required-parameter
+validation, dispatched-resource failure propagation, `validate` not
+creating resources, and delete-is-idempotent-but-doesn't-cascade), the
+`az rest` smoke tests (`scripts/test-az-cli.sh`/`.ps1` — PUT a
+deployment templating a real storage account via
+`parameters()`/`variables()`/`resourceId()` → GET deployment
+(`provisioningState: Succeeded`) → list operations (one Succeeded
+entry) → GET the dispatched storage account (proving it was really
+created) → POST validate (shape-only, creates nothing) → DELETE
+deployment → GET the storage account again (must survive) → cleanup),
+and a real `terraform apply`/`destroy` cycle against both Terraform
+configs: `terraform/smoke-test/main.tf` (via the `http` provider, a
+`null_resource`+`local-exec` PUT plus `data.http` read-backs of the
+deployment and its dispatched storage account) and
+`terraform/azurerm-smoke-test/main.tf` (via the real `azurerm`
+provider's `azurerm_resource_group_template_deployment` resource,
+using the same `parameters()`/`resourceId()` template that
+`TestDeploymentDispatchesResourceAndPersistsOperations` exercises).
 
 ## Phase 20 — Action Groups: real webhook delivery ✅ completed
 

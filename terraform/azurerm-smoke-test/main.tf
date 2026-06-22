@@ -87,10 +87,55 @@ resource "azurerm_resource_group" "test" {
   location = var.location
 }
 
+# Fase 19 (ARM/Bicep deployments): el provider azurerm real expone
+# Microsoft.Resources/deployments como azurerm_resource_group_template_
+# deployment. El template usa parameters()/resourceId() para crear una
+# storage account real vía el dispatcher de internal/services/deployments
+# — mismo template que prueba TestDeploymentDispatchesResourceAndPersists
+# Operations en internal/services/deployments/deployments_test.go.
+resource "azurerm_resource_group_template_deployment" "test" {
+  name                = "azurerm-smoke-deployment"
+  resource_group_name = azurerm_resource_group.test.name
+  deployment_mode     = "Incremental"
+
+  template_content = jsonencode({
+    "$schema"      = "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#"
+    contentVersion = "1.0.0.0"
+    parameters = {
+      storageName = {
+        type         = "string"
+        defaultValue = "azurermsmokedeploystg"
+      }
+    }
+    variables = {
+      skuName = "Standard_LRS"
+    }
+    resources = [
+      {
+        type       = "Microsoft.Storage/storageAccounts"
+        apiVersion = "2023-01-01"
+        name       = "[parameters('storageName')]"
+        location   = var.location
+        sku        = { name = "[variables('skuName')]" }
+      }
+    ]
+    outputs = {
+      storageId = {
+        type  = "string"
+        value = "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageName'))]"
+      }
+    }
+  })
+}
+
 output "subscription_id" {
   value = data.azurerm_subscription.current.subscription_id
 }
 
 output "resource_group_id" {
   value = azurerm_resource_group.test.id
+}
+
+output "deployment_id" {
+  value = azurerm_resource_group_template_deployment.test.id
 }
