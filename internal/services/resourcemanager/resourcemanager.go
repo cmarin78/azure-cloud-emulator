@@ -96,76 +96,84 @@ type Provider struct {
 
 // ProviderResourceType replica el shape mínimo de cada tipo de recurso
 // dentro de un provider. Azure real devuelve mucho más detalle (locations,
-// apiVersions, capabilities...); aquí basta con lo que algunas
-// herramientas leen para decidir si el tipo existe en este provider.
+// apiVersions, capabilities...); ApiVersions sí hace falta más allá de lo
+// cosmético: azurerm_resource_group_template_deployment, al hacer destroy,
+// resuelve la apiVersion de cada resourceType que el deployment tocó vía
+// GET /subscriptions/{id}/providers/{namespace} para poder borrar esos
+// recursos uno por uno — sin al menos una entrada aquí falla con
+// "unable to determine API version for Resource Type ...". El valor
+// concreto no se valida en ningún otro lado del emulador (RequireAPIVersion
+// solo exige que el query param venga presente, no que coincida con esta
+// lista), así que basta con declarar una versión razonable por tipo.
 type ProviderResourceType struct {
 	ResourceType string   `json:"resourceType"`
 	Locations    []string `json:"locations"`
+	ApiVersions  []string `json:"apiVersions"`
 }
 
 var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.Resources", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "resourceGroups", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "deployments", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "resourceGroups", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2021-04-01"}},
+		{ResourceType: "deployments", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2021-04-01"}},
 	}},
 	{Namespace: "Microsoft.Storage", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "storageAccounts", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "storageAccounts", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
 	}},
 	{Namespace: "Microsoft.Network", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "virtualNetworks", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "networkInterfaces", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "networkSecurityGroups", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "publicIPAddresses", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "loadBalancers", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "routeTables", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "privateDnsZones", Locations: []string{"global"}},
+		{ResourceType: "virtualNetworks", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
+		{ResourceType: "networkInterfaces", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
+		{ResourceType: "networkSecurityGroups", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
+		{ResourceType: "publicIPAddresses", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
+		{ResourceType: "loadBalancers", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
+		{ResourceType: "routeTables", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
+		{ResourceType: "privateDnsZones", Locations: []string{"global"}, ApiVersions: []string{"2020-06-01"}},
 	}},
 	{Namespace: "Microsoft.Compute", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "disks", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "virtualMachines", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "disks", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-04-02"}},
+		{ResourceType: "virtualMachines", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
 	}},
 	{Namespace: "Microsoft.KeyVault", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "vaults", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "vaults", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-07-01"}},
 	}},
 	{Namespace: "Microsoft.ServiceBus", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01-preview"}},
 	}},
 	{Namespace: "Microsoft.DocumentDB", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "databaseAccounts", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "databaseAccounts", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-11-15"}},
 	}},
 	{Namespace: "Microsoft.OperationalInsights", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "workspaces", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "workspaces", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01"}},
 	}},
 	{Namespace: "Microsoft.Insights", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "actionGroups", Locations: []string{"global"}},
-		{ResourceType: "metricAlerts", Locations: []string{"global"}},
+		{ResourceType: "actionGroups", Locations: []string{"global"}, ApiVersions: []string{"2023-01-01"}},
+		{ResourceType: "metricAlerts", Locations: []string{"global"}, ApiVersions: []string{"2018-03-01"}},
 	}},
 	{Namespace: "Microsoft.Web", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "serverfarms", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "sites", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "serverfarms", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
+		{ResourceType: "sites", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
 	}},
 	{Namespace: "Microsoft.ContainerService", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "managedClusters", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "managedClusters", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2024-01-01"}},
 	}},
 	{Namespace: "Microsoft.Authorization", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "roleDefinitions", Locations: []string{"global"}},
-		{ResourceType: "roleAssignments", Locations: []string{"global"}},
+		{ResourceType: "roleDefinitions", Locations: []string{"global"}, ApiVersions: []string{"2022-04-01"}},
+		{ResourceType: "roleAssignments", Locations: []string{"global"}, ApiVersions: []string{"2022-04-01"}},
 	}},
 	{Namespace: "Microsoft.ManagedIdentity", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "userAssignedIdentities", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "userAssignedIdentities", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-31"}},
 	}},
 	{Namespace: "Microsoft.EventGrid", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "topics", Locations: []string{"eastus", "westus2"}},
-		{ResourceType: "eventSubscriptions", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "topics", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-06-15"}},
+		{ResourceType: "eventSubscriptions", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-06-15"}},
 	}},
 	{Namespace: "Microsoft.EventHub", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01-preview"}},
 	}},
 	{Namespace: "Microsoft.ApiManagement", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "service", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "service", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-08-01"}},
 	}},
 	{Namespace: "Microsoft.Logic", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "workflows", Locations: []string{"eastus", "westus2"}},
+		{ResourceType: "workflows", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2019-05-01"}},
 	}},
 }
 

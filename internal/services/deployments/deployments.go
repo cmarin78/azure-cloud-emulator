@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"time"
@@ -26,6 +27,7 @@ import (
 const (
 	deploymentsBucket = "deployments.deployments"
 	operationsBucket  = "deployments.operations"
+	templatesBucket   = "deployments.templates"
 	resourcesProvider = "Microsoft.Resources"
 )
 
@@ -68,6 +70,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 		s.listDeploymentOperations)
 	mux.HandleFunc("POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/validate",
 		s.validateDeployment)
+	mux.HandleFunc("POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/exportTemplate",
+		s.exportTemplate)
 }
 
 // Deployment replica el shape mínimo de Microsoft.Resources/deployments
@@ -81,17 +85,93 @@ type Deployment struct {
 }
 
 type DeploymentProperties struct {
-	ProvisioningState string           `json:"provisioningState"`
-	Mode              string           `json:"mode"`
-	Timestamp         string           `json:"timestamp"`
-	Duration          string           `json:"duration"`
-	Outputs           map[string]any   `json:"outputs"`
-	OutputResources   []OutputResource `json:"outputResources"`
-	Error             *server.APIError `json:"error,omitempty"`
+	ProvisioningState string               `json:"provisioningState"`
+	Mode              string               `json:"mode"`
+	Timestamp         string               `json:"timestamp"`
+	Duration          string               `json:"duration"`
+	Outputs           map[string]any       `json:"outputs"`
+	OutputResources   []OutputResource     `json:"outputResources"`
+	Providers         []DeploymentProvider `json:"providers,omitempty"`
+	Error             *server.APIError     `json:"error,omitempty"`
 }
 
 type OutputResource struct {
 	ID string `json:"id"`
+}
+
+// DeploymentProvider replica una entrada de properties.providers — Azure
+// real la usa (entre otras cosas) para que el provider azurerm sepa qué
+// namespaces/resourceTypes tocó este deployment al momento de hacer
+// "terraform destroy" sobre un azurerm_resource_group_template_deployment:
+// su lógica de limpieza falla con "properties.Providers was nil -
+// insufficient data to clean up this Template Deployment" si este campo
+// viene vacío, así que putDeployment lo arma a partir de los recursos ya
+// despachados (ver buildProviders).
+type DeploymentProvider struct {
+	Namespace     string                           `json:"namespace"`
+	ResourceTypes []DeploymentProviderResourceType `json:"resourceTypes"`
+}
+
+type DeploymentProviderResourceType struct {
+	ResourceType string   `json:"resourceType"`
+	Locations    []string `json:"locations,omitempty"`
+}
+
+// buildProviders agrupa los recursos ya resueltos por namespace (el
+// primer segmento de su type ARM, p.ej. "Microsoft.Storage/storageAccounts"
+// -> namespace "Microsoft.Storage", resourceType "storageAccounts"),
+// dedup por resourceType y acumulando las locations vistas para cada uno.
+func buildProviders(resources []resolvedResource) []DeploymentProvider {
+	type key struct{ ns, rt string }
+	order := make([]key, 0, len(resources))
+	locsByKey := make(map[key]map[string]bool)
+	for _, res := range resources {
+		ns, rt := splitResourceType(res.resType)
+		if ns == "" {
+			continue
+		}
+		k := key{ns, rt}
+		if _, ok := locsByKey[k]; !ok {
+			locsByKey[k] = make(map[string]bool)
+			order = append(order, k)
+		}
+		if res.location != "" {
+			locsByKey[k][res.location] = true
+		}
+	}
+
+	byNamespace := make(map[string]*DeploymentProvider)
+	providers := make([]DeploymentProvider, 0)
+	for _, k := range order {
+		p, ok := byNamespace[k.ns]
+		if !ok {
+			providers = append(providers, DeploymentProvider{Namespace: k.ns})
+			p = &providers[len(providers)-1]
+			byNamespace[k.ns] = p
+		}
+		locs := make([]string, 0, len(locsByKey[k]))
+		for loc := range locsByKey[k] {
+			locs = append(locs, loc)
+		}
+		p.ResourceTypes = append(p.ResourceTypes, DeploymentProviderResourceType{
+			ResourceType: k.rt,
+			Locations:    locs,
+		})
+	}
+	return providers
+}
+
+// splitResourceType separa "Microsoft.Storage/storageAccounts" en
+// ("Microsoft.Storage", "storageAccounts") — solo el primer "/", ya que
+// algunos resourceTypes tienen sub-recursos con más segmentos
+// (p.ej. "Microsoft.Network/virtualNetworks/subnets").
+func splitResourceType(resType string) (namespace, resourceType string) {
+	for i := 0; i < len(resType); i++ {
+		if resType[i] == '/' {
+			return resType[:i], resType[i+1:]
+		}
+	}
+	return "", ""
 }
 
 // DeploymentOperation replica una entrada de
@@ -157,8 +237,14 @@ func (s *Service) putDeployment(w http.ResponseWriter, r *http.Request) {
 	rg := r.PathValue("resourceGroupName")
 	name := r.PathValue("deploymentName")
 
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		server.WriteError(w, http.StatusBadRequest, "InvalidRequestContent",
+			fmt.Sprintf("no se pudo leer el cuerpo de la solicitud: %v", err))
+		return
+	}
 	var req deploymentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		server.WriteError(w, http.StatusBadRequest, "InvalidRequestContent",
 			fmt.Sprintf("no se pudo interpretar el cuerpo de la solicitud: %v", err))
 		return
@@ -167,6 +253,20 @@ func (s *Service) putDeployment(w http.ResponseWriter, r *http.Request) {
 	if mode == "" {
 		mode = "Incremental"
 	}
+
+	// azurerm_resource_group_template_deployment llama a ExportTemplate
+	// (POST .../exportTemplate) después de cada create/update para leer de
+	// vuelta el contenido del template — necesitamos el JSON original tal
+	// cual llegó (no la versión re-serializada desde el struct `template`,
+	// que perdería $schema/contentVersion y cualquier campo que ese tipo no
+	// modele) para poder devolverlo ahí. Se extrae con un decode separado
+	// sobre los mismos bytes ya leídos arriba.
+	var rawTemplateWrapper struct {
+		Properties struct {
+			Template json.RawMessage `json:"template"`
+		} `json:"properties"`
+	}
+	_ = json.Unmarshal(body, &rawTemplateWrapper)
 
 	_, existed, _ := s.getDeploymentRecord(subID, rg, name)
 
@@ -201,6 +301,7 @@ func (s *Service) putDeployment(w http.ResponseWriter, r *http.Request) {
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			Duration:  "PT0S",
 			Outputs:   map[string]any{},
+			Providers: buildProviders(ordered),
 		},
 	}
 
@@ -239,6 +340,12 @@ func (s *Service) putDeployment(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.Put(deploymentsBucket, deploymentKey(subID, rg, name), deployment); err != nil {
 		server.WriteError(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
+	}
+	if len(rawTemplateWrapper.Properties.Template) > 0 {
+		if err := s.db.Put(templatesBucket, deploymentKey(subID, rg, name), rawTemplateWrapper.Properties.Template); err != nil {
+			server.WriteError(w, http.StatusInternalServerError, "InternalError", err.Error())
+			return
+		}
 	}
 
 	url := server.AsyncOperationURL(r, subID, resourcesProvider, "global", opID, apiVersion)
@@ -487,6 +594,42 @@ func (s *Service) validateDeployment(w http.ResponseWriter, r *http.Request) {
 			OutputResources:   outputResources,
 		},
 	})
+}
+
+// exportTemplate emula POST .../deployments/{name}/exportTemplate: el
+// provider azurerm real (recurso azurerm_resource_group_template_
+// deployment) lo llama después de cada create/update para leer de vuelta
+// el contenido del template y poblar el atributo template_content del
+// state — sin este endpoint el `apply` falla con un 404 al intentar
+// "exportar" el template recién creado. Devuelve tal cual el JSON crudo
+// que putDeployment persistió en templatesBucket (ver comentario ahí).
+func (s *Service) exportTemplate(w http.ResponseWriter, r *http.Request) {
+	if _, ok := server.RequireAPIVersion(w, r); !ok {
+		return
+	}
+	subID := r.PathValue("subscriptionId")
+	rg := r.PathValue("resourceGroupName")
+	name := r.PathValue("deploymentName")
+
+	if _, found, err := s.getDeploymentRecord(subID, rg, name); err != nil {
+		server.WriteError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	} else if !found {
+		server.WriteError(w, http.StatusNotFound, "DeploymentNotFound",
+			fmt.Sprintf("el deployment '%s' no existe en el resource group '%s'", name, rg))
+		return
+	}
+
+	var raw json.RawMessage
+	found, err := s.db.Get(templatesBucket, deploymentKey(subID, rg, name), &raw)
+	if err != nil {
+		server.WriteError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !found {
+		raw = json.RawMessage("{}")
+	}
+	server.WriteJSON(w, http.StatusOK, map[string]any{"template": raw})
 }
 
 // deleteDeployment borra solo el registro del deployment (y sus

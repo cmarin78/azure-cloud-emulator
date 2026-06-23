@@ -509,6 +509,8 @@ account via `parameters()`/`resourceId()`, dispatched through
 `internal/services/deployments`), and reads the subscription via
 `data "azurerm_subscription"`.
 
+See [`docs/poc-terraform-azurerm.md`](docs/poc-terraform-azurerm.md) for a real, captured `init`/`plan`/`apply`/`destroy` transcript against this provider — including three real bugs this exact test surfaced and fixed in the deployments lifecycle (`exportTemplate`, `properties.providers`, and provider `apiVersions`).
+
 ### Terraform usage examples
 
 Override any default (endpoint, names, location) with `-var` instead of

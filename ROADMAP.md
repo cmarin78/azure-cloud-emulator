@@ -998,6 +998,22 @@ useful, independent of the phase order:
   pools, app settings) stay on `az`/Terraform for now. Verified the
   exact request/response shapes against the running emulator via curl
   before wiring up the JS.
+- ✅ **Real `azurerm` provider deployment-lifecycle bugs**: a live
+  `terraform init`/`plan`/`apply`/`destroy` PoC against the real
+  `hashicorp/azurerm` provider (not the generic `http` provider) surfaced
+  three bugs in the ARM template-deployment lifecycle that no existing
+  unit test or `az`/`http`-provider smoke test exercised: a missing
+  `POST .../deployments/{name}/exportTemplate` endpoint (added, backed by
+  a new `deployments.templates` BoltDB bucket), a missing
+  `properties.providers` field on `DeploymentProperties` needed for
+  destroy-time cleanup (added, populated by a new `buildProviders()`
+  helper in `internal/services/deployments`), and missing `apiVersions`
+  on `resourcemanager.ProviderResourceType` needed by the provider to
+  pick a version when deleting each resource type (added across every
+  entry in `registeredNamespaces`, not just `Microsoft.Storage`, to avoid
+  the same failure mode for other namespaces). Verified via unit tests
+  plus a full clean live re-run of the four-step lifecycle, captured in
+  [`docs/poc-terraform-azurerm.md`](docs/poc-terraform-azurerm.md).
 
 Further phases beyond these will keep being added as unplanned phases
 once the above is solid, the same way gcp-emulator grew past its
