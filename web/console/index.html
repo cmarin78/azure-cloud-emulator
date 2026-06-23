@@ -24,6 +24,11 @@
       <button class="nav-item" data-view="kv">Key Vault</button>
       <button class="nav-item" data-view="sb">Service Bus</button>
       <button class="nav-item" data-view="cosmos">Cosmos DB</button>
+      <button class="nav-item" data-view="monitor">Monitor</button>
+      <button class="nav-item" data-view="appservice">App Service</button>
+      <button class="nav-item" data-view="network">Networking</button>
+      <button class="nav-item" data-view="aks">AKS</button>
+      <button class="nav-item" data-view="functions">Functions</button>
     </nav>
 
     <main class="content">
@@ -112,6 +117,196 @@
         <table>
           <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Document endpoint</th><th></th></tr></thead>
           <tbody id="cosmosTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-monitor" class="view">
+        <h1>Monitor</h1>
+        <p class="hint">Listados dentro del resource group seleccionado arriba.</p>
+
+        <h2>Log Analytics — Workspaces</h2>
+        <div class="toolbar">
+          <input id="newWorkspaceName" placeholder="nombre del workspace" />
+          <input id="newWorkspaceLocation" placeholder="location" value="eastus" />
+          <button onclick="createWorkspace()">Crear workspace</button>
+          <button onclick="loadWorkspaces()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Customer ID</th><th></th></tr></thead>
+          <tbody id="workspaceTable"></tbody>
+        </table>
+
+        <h2>Action Groups</h2>
+        <div class="toolbar">
+          <input id="newAgName" placeholder="nombre del action group" />
+          <input id="newAgShortName" placeholder="groupShortName" />
+          <input id="newAgEmail" placeholder="email (opcional)" />
+          <button onclick="createActionGroup()">Crear action group</button>
+          <button onclick="loadActionGroups()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Short name</th><th>Última notificación</th><th></th></tr></thead>
+          <tbody id="agTable"></tbody>
+        </table>
+
+        <h2>Metric Alerts</h2>
+        <p class="hint">Usa criteria por defecto (SingleResourceMultipleMetricCriteria); ajusta condiciones específicas con <code>az</code>/Terraform.</p>
+        <div class="toolbar">
+          <input id="newMaName" placeholder="nombre del alert" />
+          <input id="newMaScope" placeholder="resource ID del scope" style="width:320px" />
+          <button onclick="createMetricAlert()">Crear metric alert</button>
+          <button onclick="loadMetricAlerts()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Severity</th><th>Enabled</th><th>Scopes</th><th></th></tr></thead>
+          <tbody id="maTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-appservice" class="view">
+        <h1>App Service</h1>
+        <p class="hint">Listados dentro del resource group seleccionado arriba.</p>
+
+        <h2>App Service Plans</h2>
+        <div class="toolbar">
+          <input id="newPlanName" placeholder="nombre del plan" />
+          <input id="newPlanLocation" placeholder="location" value="eastus" />
+          <input id="newPlanSku" placeholder="sku.name" value="B1" />
+          <button onclick="createPlan()">Crear plan</button>
+          <button onclick="loadPlans()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="planTable"></tbody>
+        </table>
+
+        <h2>Web Apps (sites)</h2>
+        <p class="hint">Config/appsettings se administra con <code>az</code>/Terraform por ahora.</p>
+        <div class="toolbar">
+          <input id="newSiteName" placeholder="nombre del site" />
+          <input id="newSiteLocation" placeholder="location" value="eastus" />
+          <input id="newSitePlan" placeholder="nombre del plan (serverFarmId)" />
+          <button onclick="createSite()">Crear site</button>
+          <button onclick="loadSites()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>State</th><th>Default hostname</th><th></th></tr></thead>
+          <tbody id="siteTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-network" class="view">
+        <h1>Networking</h1>
+        <p class="hint">Listados dentro del resource group seleccionado arriba. Subnets, security rules, routes y record sets son sub-recursos administrados con <code>az</code>/Terraform por ahora.</p>
+
+        <h2>Virtual Networks</h2>
+        <div class="toolbar">
+          <input id="newVNetName" placeholder="nombre del vnet" />
+          <input id="newVNetLocation" placeholder="location" value="eastus" />
+          <input id="newVNetPrefix" placeholder="address prefix" value="10.0.0.0/16" />
+          <button onclick="createVNet()">Crear vnet</button>
+          <button onclick="loadVNets()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Address space</th><th></th></tr></thead>
+          <tbody id="vnetTable"></tbody>
+        </table>
+
+        <h2>Network Security Groups</h2>
+        <div class="toolbar">
+          <input id="newNsgName" placeholder="nombre del nsg" />
+          <input id="newNsgLocation" placeholder="location" value="eastus" />
+          <button onclick="createNSG()">Crear NSG</button>
+          <button onclick="loadNSGs()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Reglas</th><th></th></tr></thead>
+          <tbody id="nsgTable"></tbody>
+        </table>
+
+        <h2>Public IP Addresses</h2>
+        <div class="toolbar">
+          <input id="newPipName" placeholder="nombre del public ip" />
+          <input id="newPipLocation" placeholder="location" value="eastus" />
+          <button onclick="createPublicIP()">Crear public IP</button>
+          <button onclick="loadPublicIPs()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Allocation</th><th>IP</th><th></th></tr></thead>
+          <tbody id="pipTable"></tbody>
+        </table>
+
+        <h2>Load Balancers</h2>
+        <p class="hint">Crea primero el public IP que va a usar como frontend.</p>
+        <div class="toolbar">
+          <input id="newLbName" placeholder="nombre del load balancer" />
+          <input id="newLbLocation" placeholder="location" value="eastus" />
+          <input id="newLbPip" placeholder="nombre del public IP existente" />
+          <button onclick="createLoadBalancer()">Crear load balancer</button>
+          <button onclick="loadLoadBalancers()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Frontends</th><th>Backend pools</th><th></th></tr></thead>
+          <tbody id="lbTable"></tbody>
+        </table>
+
+        <h2>Route Tables</h2>
+        <div class="toolbar">
+          <input id="newRtName" placeholder="nombre de la route table" />
+          <input id="newRtLocation" placeholder="location" value="eastus" />
+          <button onclick="createRouteTable()">Crear route table</button>
+          <button onclick="loadRouteTables()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Rutas</th><th></th></tr></thead>
+          <tbody id="rtTable"></tbody>
+        </table>
+
+        <h2>Private DNS Zones</h2>
+        <div class="toolbar">
+          <input id="newDnsName" placeholder="nombre de la zona (ej. example.internal)" style="width:260px" />
+          <button onclick="createDNSZone()">Crear zona</button>
+          <button onclick="loadDNSZones()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Record sets</th><th></th></tr></thead>
+          <tbody id="dnsTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-aks" class="view">
+        <h1>AKS — Managed Clusters</h1>
+        <p class="hint">Listados dentro del resource group seleccionado arriba. Agent pools adicionales se administran con <code>az</code>/Terraform por ahora.</p>
+        <div class="toolbar">
+          <input id="newAksName" placeholder="nombre del cluster" />
+          <input id="newAksLocation" placeholder="location" value="eastus" />
+          <input id="newAksDnsPrefix" placeholder="dnsPrefix" />
+          <button onclick="createCluster()">Crear cluster</button>
+          <button onclick="loadClusters()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>DNS prefix</th><th>Agent pools</th><th></th></tr></thead>
+          <tbody id="aksTable"></tbody>
+        </table>
+      </section>
+
+      <section id="view-functions" class="view">
+        <h1>Functions</h1>
+        <p class="hint">Las funciones viven bajo un Function App (<code>Microsoft.Web/sites</code> con kind=functionapp) — créalo primero en la vista de App Service.</p>
+        <div class="toolbar">
+          <input id="funcAppInput" placeholder="nombre del Function App" onchange="loadFunctions()" />
+          <button onclick="loadFunctions()">Refrescar</button>
+          <button onclick="syncFunctionTriggers()">syncfunctiontriggers</button>
+          <button onclick="listFunctionKeys()">listkeys</button>
+        </div>
+        <div class="toolbar">
+          <input id="newFuncName" placeholder="nombre de la función" />
+          <input id="newFuncLanguage" placeholder="language" value="javascript" />
+          <button onclick="createFunction()">Crear función (httpTrigger)</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Language</th><th>Invoke URL</th><th></th></tr></thead>
+          <tbody id="funcTable"></tbody>
         </table>
       </section>
 

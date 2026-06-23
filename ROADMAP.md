@@ -978,20 +978,26 @@ highest-value next investment versus more resource-type breadth.
 These aren't blocked on anything above and can be picked up whenever
 useful, independent of the phase order:
 
-- **`scripts/test-az-cli.sh`/`.ps1` state cleanup**: currently a
-  partial/interrupted run followed by a full re-run can leave stale
-  table/entity rows in BoltDB, producing `TableAlreadyExists`/
-  `EntityAlreadyExists` `Conflict` errors on the next full run (seen
-  during Phase 14's live verification). Fix by having the script
-  delete-then-create (or skip-if-exists) for every resource it touches,
-  the same idempotent-setup pattern already used elsewhere in the
-  script, rather than assuming a pristine DB.
-- **Web console catch-up**: `web/console` (Phase 7) only covers the six
-  resource types implemented through Phase 6 — Monitor/Log Analytics
-  (Phase 10), App Service (Phase 11), the Phase 12 networking
-  additions (NSGs, Public IPs, Load Balancers, Route Tables, Private
-  DNS), AKS (Phase 13), and Functions (Phase 14) have no web UI yet,
-  only REST/az CLI/Terraform access.
+- ✅ **`scripts/test-az-cli.sh`/`.ps1` state cleanup**: fixed by adding a
+  delete-then-create idempotent setup step (errors ignored) right
+  before the table/entity creation calls, so a re-run after a
+  partial/interrupted prior run no longer fails with
+  `TableAlreadyExists`/`EntityAlreadyExists` `Conflict`. Verified live
+  with two consecutive full runs of `test-az-cli.sh` against the same
+  emulator instance, both completing cleanly.
+- ✅ **Web console catch-up**: `web/console` (Phase 7) originally only
+  covered the six resource types implemented through Phase 6. Added
+  Monitor/Log Analytics (Phase 10: workspaces, action groups, metric
+  alerts), App Service (Phase 11: plans, sites), the Phase 12
+  networking additions (virtual networks, NSGs, public IPs, load
+  balancers, route tables, private DNS zones), AKS (Phase 13: managed
+  clusters), and Functions (Phase 14: function definitions under a
+  Function App). Each new section follows the existing
+  load/create/delete pattern; sub-resources not yet exposed in the UI
+  (subnets, security rules, route entries, DNS record sets, agent
+  pools, app settings) stay on `az`/Terraform for now. Verified the
+  exact request/response shapes against the running emulator via curl
+  before wiring up the JS.
 
 Further phases beyond these will keep being added as unplanned phases
 once the above is solid, the same way gcp-emulator grew past its

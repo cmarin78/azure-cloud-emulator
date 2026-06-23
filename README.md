@@ -74,7 +74,11 @@ gcp-emulator's own Phase 11).
   plain JSON body instead of partition-key headers).
 - ✅ Web console for browsing emulated resources (read/list plus create/
   delete for resource groups, storage accounts, vaults, Service Bus
-  namespaces, Cosmos DB accounts; VMs are list/start/stop/delete only).
+  namespaces, Cosmos DB accounts, Log Analytics workspaces, action
+  groups, metric alerts, App Service plans/sites, virtual networks,
+  NSGs, public IPs, load balancers, route tables, private DNS zones,
+  AKS managed clusters, and Functions; VMs are list/start/stop/delete
+  only).
 - ✅ Real `az`/`azurerm` compatibility: ARM metadata discovery, fake AAD
   token issuer, Microsoft Graph stub, `providers` registration, optional
   self-signed TLS, and case-insensitive ARM path matching.
@@ -236,10 +240,14 @@ latter is what the Docker image uses).
 
 Once the emulator is running, visit `http://localhost:10000/` for a
 minimal web console covering resource groups, storage accounts,
-virtual machines, Key Vault vaults, Service Bus namespaces, and Cosmos
-DB accounts (scoped to whatever's implemented so far). It's a plain
-HTML/CSS/JS app with no build step, served by the binary itself and
-talking to the emulator's own JSON REST API via `fetch`.
+virtual machines, Key Vault vaults, Service Bus namespaces, Cosmos DB
+accounts, Monitor (Log Analytics workspaces, action groups, metric
+alerts), App Service (plans and sites), networking (virtual networks,
+NSGs, public IPs, load balancers, route tables, private DNS zones),
+AKS managed clusters, and Functions (scoped to whatever's implemented
+so far). It's a plain HTML/CSS/JS app with no build step, served by
+the binary itself and talking to the emulator's own JSON REST API via
+`fetch`.
 
 The console's static files live in `web/console` and are served from
 the `-web` flag's directory (default `web/console`; override with

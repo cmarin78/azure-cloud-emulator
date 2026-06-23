@@ -105,6 +105,19 @@ h1 {
   margin: 0 0 16px;
 }
 
+h2 {
+  font-size: 15px;
+  margin: 28px 0 8px;
+}
+
+h2:first-of-type {
+  margin-top: 0;
+}
+
+table + h2 {
+  margin-top: 28px;
+}
+
 .toolbar {
   display: flex;
   gap: 8px;
