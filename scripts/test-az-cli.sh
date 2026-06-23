@@ -128,6 +128,21 @@ az rest --method delete \
 
 TABLE="smoketesttable"
 
+# Limpieza idempotente: una corrida previa interrumpida puede dejar la tabla
+# (o la entidad) ya creada en BoltDB, y la API de table storage usa POST
+# (no PUT) para crear ambas, así que un re-run completo fallaría con
+# TableAlreadyExists/EntityAlreadyExists Conflict sin este delete-then-create
+# (visto durante la verificación en vivo de la Fase 14). Los errores de un
+# delete sobre algo que no existe se ignoran a propósito.
+echo "-- DELETE entity preexistente (limpieza idempotente, ignora error si no existe) --"
+az rest --method delete \
+  --url "${ENDPOINT}/${ACCOUNT}.table/${TABLE}(PartitionKey='ar',RowKey='1')" \
+  --headers "If-Match=*" >/dev/null 2>&1 || true
+
+echo "-- DELETE table preexistente (limpieza idempotente, ignora error si no existe) --"
+az rest --method delete \
+  --url "${ENDPOINT}/${ACCOUNT}.table/Tables('${TABLE}')" >/dev/null 2>&1 || true
+
 echo "-- POST create table (data plane) --"
 az rest --method post \
   --url "${ENDPOINT}/${ACCOUNT}.table/Tables" \

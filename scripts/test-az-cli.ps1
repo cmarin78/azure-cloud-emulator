@@ -128,6 +128,18 @@ $EntityBodyFile = New-TemporaryFile
 "{`"TableName`": `"$Table`"}" | Set-Content -NoNewline -Path $TableBodyFile
 '{"PartitionKey": "ar", "RowKey": "1", "Name": "Cesar", "Age": 47}' | Set-Content -NoNewline -Path $EntityBodyFile
 
+# Limpieza idempotente: una corrida previa interrumpida puede dejar la tabla
+# (o la entidad) ya creada en BoltDB, y la API de table storage usa POST
+# (no PUT) para crear ambas, asi que un re-run completo fallaria con
+# TableAlreadyExists/EntityAlreadyExists Conflict sin este delete-then-create
+# (visto durante la verificacion en vivo de la Fase 14). Los errores se
+# ignoran a proposito si el recurso no existia.
+Write-Host "-- DELETE entity preexistente (limpieza idempotente, ignora error si no existe) --"
+try { Invoke-RestMethod -Method Delete -Uri "$Endpoint/$Account.table/$Table(PartitionKey='ar',RowKey='1')" -Headers @{"If-Match"="*"} | Out-Null } catch {}
+
+Write-Host "-- DELETE table preexistente (limpieza idempotente, ignora error si no existe) --"
+try { Invoke-RestMethod -Method Delete -Uri "$Endpoint/$Account.table/Tables('$Table')" | Out-Null } catch {}
+
 Write-Host "-- POST create table (data plane) --"
 az rest --method post --url "$Endpoint/$Account.table/Tables" --body "@$TableBodyFile"
 
