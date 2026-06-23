@@ -1142,6 +1142,66 @@ echo "-- DELETE storage account creada por el deployment (limpieza) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${DEPLOY_STORAGE}?api-version=${API_STORAGE}"
 
+# Fase 21 (Logic Apps): a diferencia del placeholder localhost:10999/webhook
+# de la Fase 20 (que nunca arranca un listener real), aqui SI arrancamos uno
+# (scripts/webhook-counter-listener.py) para confirmar de forma positiva que
+# el emulador hizo una llamada HTTP real, tanto en el disparo manual como en
+# al menos un disparo automatico por recurrencia (interval corto).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+API_LOGIC="2019-05-01"
+WORKFLOW="smoketest-workflow"
+LISTENER_PORT=10999
+
+echo "-- Arrancando listener de prueba en localhost:${LISTENER_PORT} (cuenta POSTs reales) --"
+python3 "${SCRIPT_DIR}/webhook-counter-listener.py" "${LISTENER_PORT}" &
+LISTENER_PID=$!
+trap 'kill "${LISTENER_PID}" 2>/dev/null || true' EXIT
+sleep 1
+
+echo "-- PUT workflow (Recurrence cada 5s + accion Http hacia el listener) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Logic/workflows/${WORKFLOW}?api-version=${API_LOGIC}" \
+  --body "{\"location\": \"eastus\", \"properties\": {\"definition\": {\"\$schema\": \"https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#\", \"contentVersion\": \"1.0.0.0\", \"triggers\": {\"recurrence\": {\"type\": \"Recurrence\", \"recurrence\": {\"frequency\": \"Second\", \"interval\": 5}}}, \"actions\": {\"callListener\": {\"type\": \"Http\", \"inputs\": {\"method\": \"POST\", \"uri\": \"http://localhost:${LISTENER_PORT}/webhook\"}}}}}}"
+
+echo "-- GET workflow (provisioningState/state deben ser Succeeded/Enabled) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Logic/workflows/${WORKFLOW}?api-version=${API_LOGIC}"
+
+echo "-- POST trigger run manual (sincrono: dispara una llamada Http real de inmediato) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Logic/workflows/${WORKFLOW}/triggers/recurrence/run?api-version=${API_LOGIC}" \
+  --body "{}"
+
+echo "-- GET workflow tras el run manual (lastRunStatus debe ser 'ok') --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Logic/workflows/${WORKFLOW}?api-version=${API_LOGIC}"
+
+echo "-- Confirmando que el listener de prueba recibio el POST real del run manual --"
+COUNT_AFTER_MANUAL=$(curl -sf "http://localhost:${LISTENER_PORT}/count")
+if [ "${COUNT_AFTER_MANUAL}" -lt 1 ]; then
+  echo "ERROR: el listener no recibio ningun POST tras el run manual (count=${COUNT_AFTER_MANUAL})" >&2
+  exit 1
+fi
+echo "   listener recibio ${COUNT_AFTER_MANUAL} POST(s) hasta ahora"
+
+echo "-- Esperando un ciclo de recurrencia automatica (interval=5s) --"
+sleep 7
+
+COUNT_AFTER_AUTO=$(curl -sf "http://localhost:${LISTENER_PORT}/count")
+if [ "${COUNT_AFTER_AUTO}" -le "${COUNT_AFTER_MANUAL}" ]; then
+  echo "ERROR: no se detecto ningun disparo automatico por recurrencia (count antes=${COUNT_AFTER_MANUAL}, despues=${COUNT_AFTER_AUTO})" >&2
+  exit 1
+fi
+echo "   listener recibio ${COUNT_AFTER_AUTO} POST(s) en total (incluye al menos un disparo automatico)"
+
+echo "-- DELETE workflow --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Logic/workflows/${WORKFLOW}?api-version=${API_LOGIC}"
+
+echo "-- Deteniendo listener de prueba --"
+kill "${LISTENER_PID}" 2>/dev/null || true
+trap - EXIT
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

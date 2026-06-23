@@ -94,7 +94,12 @@ push, Cloud Scheduler firing, Cloud Tasks dispatch) and Phase 12
 rationale and the concrete patterns being ported. Phase 20 (Action
 Groups real webhook delivery) is done: `createNotifications` now
 dispatches a real HTTP POST to each `webhookReceivers` entry — see
-Phase 20 below for details.
+Phase 20 below for details. Phase 21 (Logic App Recurrence trigger) is
+done: a new `internal/cronlike` recurrence evaluator plus
+`Microsoft.Logic/workflows` (ARM CRUD, sync, a single `Recurrence`
+trigger and a single `Http` action that both really work) and a
+per-workflow firing goroutine that really dispatches an HTTP call on
+schedule — see Phase 21 below for details.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -850,7 +855,7 @@ real `az monitor action-group test-notifications create` CLI command)
 can invoke it, so this phase is covered by az CLI smoke testing only,
 not Terraform.
 
-## Phase 21 — Scheduler-equivalent: Logic App Recurrence trigger 🔜 planned
+## Phase 21 — Scheduler-equivalent: Logic App Recurrence trigger ✅ completed
 
 Net-new service — unlike Phase 20, there's no existing azure-emulator
 resource to extend, and unlike Event Grid (Phase 17), there's no
@@ -862,10 +867,10 @@ here.
 
 | Resource | Depends on | Why | Effort | Status |
 |---|---|---|---|---|
-| New `internal/cronlike` package: minimal recurrence evaluator (interval + frequency: Second/Minute/Hour/Day/Week/Month, optional `startTime`) | — | Reimplementation (not a copy) of gcp-emulator's `internal/cronexpr`, adapted to Logic Apps' `recurrence` object shape (`{"frequency": "Hour", "interval": 1}`) instead of 5-field unix-cron, since that's the shape `azurerm_logic_app_workflow`/ARM actually send | M | planned |
-| `Microsoft.Logic/workflows` (ARM CRUD, sync) — Consumption plan only, `definition.triggers` restricted to a single `Recurrence` trigger, `definition.actions` restricted to a single `Http` action | recurrence evaluator above | `azurerm_logic_app_workflow`; the minimum shape that lets a workflow be provisioned and have something real happen | M | planned |
-| Per-workflow firing goroutine, resume-on-restart from BoltDB state | workflows above | Same pattern as gcp-emulator's Cloud Scheduler `startFiring`/`stopFiring`/`fireLoop`: a `map[string]chan struct{}` of stop signals, relaunched in `New()` for every workflow whose state is enabled | M | planned |
-| `POST .../workflows/{name}/triggers/{trigger}/run` (manual trigger action) | workflows above | Mirrors Cloud Scheduler's `:run` — lets the az CLI/Terraform smoke tests fire a workflow on demand instead of waiting for the schedule | S | planned |
+| New `internal/cronlike` package: minimal recurrence evaluator (interval + frequency: Second/Minute/Hour/Day/Week/Month, optional `startTime`) | — | Reimplementation (not a copy) of gcp-emulator's `internal/cronexpr`, adapted to Logic Apps' `recurrence` object shape (`{"frequency": "Hour", "interval": 1}`) instead of 5-field unix-cron, since that's the shape `azurerm_logic_app_workflow`/ARM actually send | M | done |
+| `Microsoft.Logic/workflows` (ARM CRUD, sync) — Consumption plan only, `definition.triggers` restricted to a single `Recurrence` trigger, `definition.actions` restricted to a single `Http` action | recurrence evaluator above | `azurerm_logic_app_workflow`; the minimum shape that lets a workflow be provisioned and have something real happen | M | done |
+| Per-workflow firing goroutine, resume-on-restart from BoltDB state | workflows above | Same pattern as gcp-emulator's Cloud Scheduler `startFiring`/`stopFiring`/`fireLoop`: a `map[string]chan struct{}` of stop signals, relaunched in `New()` for every workflow whose state is enabled | M | done |
+| `POST .../workflows/{name}/triggers/{trigger}/run` (manual trigger action) | workflows above | Mirrors Cloud Scheduler's `:run` — lets the az CLI/Terraform smoke tests fire a workflow on demand instead of waiting for the schedule | S | done |
 
 Any `actions` entry beyond a single `Http` action stays unparsed
 passthrough JSON, same "shape-compatible, not behavior-complete"
@@ -879,6 +884,68 @@ neither's real Azure API exposes a cron-like recurrence concept, so
 forcing one in would misrepresent the real service's shape, which
 this project has consistently avoided (see the no-referential-integrity
 convention notes throughout Phases 10-15).
+
+Implemented in two new packages: `internal/cronlike` (`Recurrence{Frequency,
+Interval, StartTime}`, `Validate()`, and `Next(recurrence, created, after)`
+computing the next fire time for `Second`/`Minute`/`Hour`/`Day`/`Week`/`Month`
+frequencies) and `internal/services/logicapps` (`Microsoft.Logic/workflows`
+ARM CRUD, registered in `cmd/azure-emulator/main.go` and
+`resourcemanager.go`'s `registeredNamespaces`). Workflows are fully
+synchronous (no LRO), matching App Service's/AKS's-sibling sync resource
+families rather than AKS's own async pattern, since there's no
+multi-minute provisioning step to fake here. `definition.triggers` is
+restricted to exactly one `Recurrence`-type trigger and `definition.actions`
+to exactly one `Http`-type action — anything else in either map is rejected
+with 400, rather than silently ignored, so a misconfigured workflow fails
+fast instead of looking like it's running. On every successful PUT, the
+service (re)launches a per-workflow goroutine (`startFiring`) that sleeps
+until `cronlike.Next` says the recurrence is due, performs a real
+`http.NewRequestWithContext` POST to the `Http` action's `uri` (same
+`*http.Client{Timeout: ...}` fire-and-forget dispatch pattern as Event Grid's
+webhook delivery in Phase 17 and Action Groups' in Phase 20, no retry, no
+dead-lettering), and loops — stopped via a `map[string]chan struct{}` of
+stop signals on delete or on `state` transitioning away from `"Enabled"`,
+and relaunched for every persisted workflow whose `properties.state` is
+still `"Enabled"` when `New(db)` runs, so a server restart resumes firing
+without the caller having to re-PUT anything (same resume-on-restart
+convention as gcp-emulator's Cloud Scheduler). `POST
+.../triggers/{trigger}/run` is deliberately **synchronous** — unlike the
+automatic recurrence firing, it blocks until the one-off dispatched HTTP
+call returns (or times out) and reports the outcome immediately via
+`lastRunStatus`/`lastRunTime` on the workflow, so a caller (or a smoke test)
+gets a deterministic, immediately-checkable result instead of having to
+poll. Workflow deletes are idempotent (204 if missing, matching resource
+groups' convention) and stop the firing goroutine first. Confirmed via
+`cronlike_test.go` and `logicapps_test.go` (`httptest`, covering
+`Next`'s frequency/interval/startTime math, trigger/action shape
+validation, the manual-run endpoint's synchronous outcome reporting, and
+delete stopping the firing goroutine), and — going beyond the Go test
+suite, as this phase's behavior is specifically about something really
+happening on a timer — a live, real end-to-end run against the actual
+emulator binary for all three smoke-test surfaces: `scripts/test-az-cli.ps1`,
+`scripts/test-az-cli.sh`, and `terraform/smoke-test/main.tf`. Each one
+starts a real, dedicated counter-listener process (`scripts/
+webhook-counter-listener.ps1`/`.py` — a minimal HTTP server that counts
+every POST it receives except to its own `/count` path, exposing the
+count via `GET /count`) rather than reusing Phase 20's never-started
+`localhost:10999/webhook` placeholder, because this phase's manual-run
+and automatic-recurrence requirements need a *positive* confirmation of
+real receipt, not just a recorded delivery-attempt status field. Each
+surface: PUTs a workflow with a `Recurrence` trigger (`interval: 5`
+seconds) and an `Http` action pointed at the listener, GETs it back,
+POSTs a manual trigger run and confirms the listener's counter is at
+least 1 immediately after, sleeps 7 seconds (more than one recurrence
+interval) and confirms the counter has gone *up further* (proving an
+automatic, unprompted fire actually happened on schedule, not just the
+manual one), then deletes the workflow and stops the listener. In
+Terraform, the "count increased" assertions are enforced by a
+`null_resource`/`local-exec` PowerShell script that `throw`s (failing
+`terraform apply` with a non-zero exit) if either condition isn't met,
+since the generic `http` provider's `data` sources have no native
+assertion mechanism. All three runs passed live against a real running
+instance of the emulator: the manual run produced exactly 1 received
+POST, and after the 7-second wait the counter had reached 2, confirming
+a genuine unprompted recurrence fire.
 
 ## Phase 22 — Pluggable real-execution backends 💭 proposed (not yet planned)
 

@@ -1030,6 +1030,60 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $DeploymentBodyFile, $ValidateBodyFile -ErrorAction SilentlyContinue
 
+# Fase 21 (Logic Apps): a diferencia del placeholder localhost:10999/webhook
+# de la Fase 20 (que nunca arranca un listener real), aqui SI arrancamos uno
+# (scripts/webhook-counter-listener.ps1) para confirmar de forma positiva
+# que el emulador hizo una llamada HTTP real, tanto en el disparo manual
+# como en al menos un disparo automatico por recurrencia (interval corto).
+$ApiLogic = "2019-05-01"
+$Workflow = "smoketest-workflow"
+$ListenerPort = 10999
+
+Write-Host "-- Arrancando listener de prueba en localhost:$ListenerPort (cuenta POSTs reales) --"
+$ListenerProc = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-File", "$PSScriptRoot\webhook-counter-listener.ps1", "-Port", "$ListenerPort" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 1
+
+try {
+    $WorkflowBodyFile = New-TemporaryFile
+    "{`"location`": `"eastus`", `"properties`": {`"definition`": {`"`$schema`": `"https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#`", `"contentVersion`": `"1.0.0.0`", `"triggers`": {`"recurrence`": {`"type`": `"Recurrence`", `"recurrence`": {`"frequency`": `"Second`", `"interval`": 5}}}, `"actions`": {`"callListener`": {`"type`": `"Http`", `"inputs`": {`"method`": `"POST`", `"uri`": `"http://localhost:$ListenerPort/webhook`"}}}}}}" | Set-Content -NoNewline -Path $WorkflowBodyFile
+
+    Write-Host "-- PUT workflow (Recurrence cada 5s + accion Http hacia el listener) --"
+    az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Logic/workflows/$Workflow`?api-version=$ApiLogic" --body "@$WorkflowBodyFile"
+
+    Write-Host "-- GET workflow (provisioningState/state deben ser Succeeded/Enabled) --"
+    az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Logic/workflows/$Workflow`?api-version=$ApiLogic"
+
+    Write-Host "-- POST trigger run manual (sincrono: dispara una llamada Http real de inmediato) --"
+    az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Logic/workflows/$Workflow/triggers/recurrence/run`?api-version=$ApiLogic" --body "{}"
+
+    Write-Host "-- GET workflow tras el run manual (lastRunStatus debe ser 'ok') --"
+    az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Logic/workflows/$Workflow`?api-version=$ApiLogic"
+
+    Write-Host "-- Confirmando que el listener de prueba recibio el POST real del run manual --"
+    $countAfterManual = [int](Invoke-RestMethod -Method Get -Uri "http://localhost:$ListenerPort/count")
+    if ($countAfterManual -lt 1) {
+        throw "el listener no recibio ningun POST tras el run manual (count=$countAfterManual)"
+    }
+    Write-Host "   listener recibio $countAfterManual POST(s) hasta ahora"
+
+    Write-Host "-- Esperando un ciclo de recurrencia automatica (interval=5s) --"
+    Start-Sleep -Seconds 7
+
+    $countAfterAuto = [int](Invoke-RestMethod -Method Get -Uri "http://localhost:$ListenerPort/count")
+    if ($countAfterAuto -le $countAfterManual) {
+        throw "no se detecto ningun disparo automatico por recurrencia (count antes=$countAfterManual, despues=$countAfterAuto)"
+    }
+    Write-Host "   listener recibio $countAfterAuto POST(s) en total (incluye al menos un disparo automatico)"
+
+    Write-Host "-- DELETE workflow --"
+    az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Logic/workflows/$Workflow`?api-version=$ApiLogic"
+
+    Remove-Item -Force $WorkflowBodyFile -ErrorAction SilentlyContinue
+} finally {
+    Write-Host "-- Deteniendo listener de prueba --"
+    Stop-Process -Id $ListenerProc.Id -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

@@ -262,6 +262,16 @@ variable "deployment_storage_account" {
   default = "tfsmokedeploystg"
 }
 
+variable "logicapps_workflow" {
+  type    = string
+  default = "tfsmoke-workflow"
+}
+
+variable "logicapps_listener_port" {
+  type    = number
+  default = 10999
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -1664,4 +1674,78 @@ output "deployment_response" {
 
 output "deployment_storage_account_response" {
   value = jsondecode(data.http.deployment_storage_account.response_body)
+}
+
+# Fase 21 (Logic Apps): a diferencia de los webhooks placeholder de la Fase
+# 17/20 (localhost:10999/webhook, donde nunca arranca un listener real),
+# aquí SÍ arrancamos uno (scripts/webhook-counter-listener.ps1) para
+# confirmar de forma positiva que el emulador hizo una llamada HTTP real,
+# tanto en el disparo manual (triggers/{name}/run) como en al menos un
+# disparo automático por recurrencia (interval corto, 5s). El listener
+# persiste su PID en un archivo bajo $env:TEMP para que el null_resource de
+# limpieza (un proceso de PowerShell distinto) pueda detenerlo.
+resource "null_resource" "logicapps_workflow" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    workflow = var.logicapps_workflow
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Start-Process -FilePath 'powershell' -ArgumentList '-NoProfile','-File','${abspath("${path.module}/../../scripts/webhook-counter-listener.ps1")}','-Port','${var.logicapps_listener_port}' -PassThru -WindowStyle Hidden | ForEach-Object { $_.Id } | Set-Content -Path \"$env:TEMP/tf-smoke-listener.pid\"; Start-Sleep -Seconds 1; Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Logic/workflows/${var.logicapps_workflow}?api-version=2019-05-01' -ContentType 'application/json' -Body '{\"location\": \"eastus\", \"properties\": {\"definition\": {\"$schema\": \"https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#\", \"contentVersion\": \"1.0.0.0\", \"triggers\": {\"recurrence\": {\"type\": \"Recurrence\", \"recurrence\": {\"frequency\": \"Second\", \"interval\": 5}}}, \"actions\": {\"callListener\": {\"type\": \"Http\", \"inputs\": {\"method\": \"POST\", \"uri\": \"http://localhost:${var.logicapps_listener_port}/webhook\"}}}}}}'"
+  }
+}
+
+resource "null_resource" "logicapps_trigger_run" {
+  depends_on = [null_resource.logicapps_workflow]
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Post -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Logic/workflows/${var.logicapps_workflow}/triggers/recurrence/run?api-version=2019-05-01' -ContentType 'application/json' -Body '{}'"
+  }
+}
+
+# Verificación con asserts reales (no solo un GET): lee el contador del
+# listener tras el run manual (debe ser >= 1), espera un ciclo completo de
+# recurrencia, y vuelve a leerlo (debe haber subido). `throw` en PowerShell
+# termina el proceso con código de salida distinto de cero, lo que hace que
+# `terraform apply` falle si cualquiera de las dos condiciones no se cumple.
+resource "null_resource" "logicapps_verify" {
+  depends_on = [null_resource.logicapps_trigger_run]
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "$countAfterManual = [int](Invoke-RestMethod -Method Get -Uri 'http://localhost:${var.logicapps_listener_port}/count'); if ($countAfterManual -lt 1) { throw \"el listener no recibio ningun POST tras el run manual (count=$countAfterManual)\" }; Start-Sleep -Seconds 7; $countAfterAuto = [int](Invoke-RestMethod -Method Get -Uri 'http://localhost:${var.logicapps_listener_port}/count'); if ($countAfterAuto -le $countAfterManual) { throw \"no se detecto ningun disparo automatico por recurrencia (antes=$countAfterManual, despues=$countAfterAuto)\" }"
+  }
+}
+
+data "http" "logicapps_workflow" {
+  depends_on = [null_resource.logicapps_verify]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Logic/workflows/${var.logicapps_workflow}?api-version=2019-05-01"
+}
+
+output "logicapps_workflow_response" {
+  value = jsondecode(data.http.logicapps_workflow.response_body)
+}
+
+# Limpieza: borra el workflow y detiene el listener de prueba leyendo el PID
+# que dejó null_resource.logicapps_workflow (cada provisioner local-exec es
+# un proceso de PowerShell nuevo, así que el PID no sobrevive en una
+# variable in-memory entre resources -- por eso se persiste en disco).
+resource "null_resource" "logicapps_cleanup" {
+  depends_on = [data.http.logicapps_workflow]
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Delete -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Logic/workflows/${var.logicapps_workflow}?api-version=2019-05-01'; $pidFile = \"$env:TEMP/tf-smoke-listener.pid\"; if (Test-Path $pidFile) { Stop-Process -Id (Get-Content $pidFile) -Force -ErrorAction SilentlyContinue; Remove-Item $pidFile -ErrorAction SilentlyContinue }"
+  }
 }

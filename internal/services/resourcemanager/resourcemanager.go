@@ -164,6 +164,9 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.ApiManagement", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "service", Locations: []string{"eastus", "westus2"}},
 	}},
+	{Namespace: "Microsoft.Logic", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "workflows", Locations: []string{"eastus", "westus2"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

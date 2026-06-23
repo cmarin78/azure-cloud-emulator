@@ -26,6 +26,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/functions"
 	"github.com/cesarmarin/azure-emulator/internal/services/graph"
 	"github.com/cesarmarin/azure-emulator/internal/services/keyvault"
+	"github.com/cesarmarin/azure-emulator/internal/services/logicapps"
 	"github.com/cesarmarin/azure-emulator/internal/services/managedidentity"
 	"github.com/cesarmarin/azure-emulator/internal/services/monitor"
 	"github.com/cesarmarin/azure-emulator/internal/services/network"
@@ -105,6 +106,11 @@ func main() {
 	eventHubSvc := eventhub.New(db, ops)
 	eventHubSvc.Register(srv.Mux())
 	apimanagement.New(db, ops).Register(srv.Mux())
+	// logicapps dispara de verdad cualquier workflow Enabled con un trigger
+	// Recurrence válido (Fase 21) -- igual que Cloud Scheduler en
+	// gcp-emulator, su New() relanza los goroutines de disparo de cualquier
+	// workflow que ya estuviera habilitado antes de un reinicio.
+	logicapps.New(db).Register(srv.Mux())
 	// deployments despacha cada recurso de un template ARM/Bicep como una
 	// solicitud PUT sintética contra srv.Mux() (el mismo mux donde ya están
 	// registrados todos los servicios anteriores) — por eso recibe el mux

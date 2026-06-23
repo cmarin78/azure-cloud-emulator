@@ -19,8 +19,9 @@ their endpoints to `localhost`.
 ## Current status
 
 All 19 core phases below are complete, plus Phase 20 (real Action Group
-webhook delivery). See [ROADMAP.md](ROADMAP.md) for what's planned next
-(the rest of the behavioral/real-delivery layer inspired by
+webhook delivery) and Phase 21 (Logic App Recurrence trigger, with a
+real firing goroutine). See [ROADMAP.md](ROADMAP.md) for what's planned
+next (the rest of the behavioral/real-delivery layer inspired by
 gcp-emulator's own Phase 11).
 
 | Phase | Area | What's implemented |
@@ -45,6 +46,7 @@ gcp-emulator's own Phase 11).
 | 18 | API Management | Service instance (ARM CRUD, async, always succeeds), APIs + operations (ARM CRUD, sync sub-resources), products + subscriptions (ARM CRUD, sync) — deterministic fake gateway URLs and subscription keys, no real proxying/policy evaluation |
 | 19 | ARM/Bicep deployments | `Microsoft.Resources/deployments` (ARM CRUD, async): resolves `parameters()`/`variables()`/`resourceId()`, orders resources by `dependsOn`, dispatches each one as a synthetic PUT to its matching existing service; `/operations` (sync), `/validate` (sync, dry-run only) |
 | 20 | Action Groups: real webhook delivery | `POST .../actionGroups/{name}/createNotifications` dispatches a real HTTP POST to each `webhookReceivers` entry; result recorded via `lastNotificationTime`/`lastNotificationStatus` (emulator-only fields) |
+| 21 | Logic Apps: Recurrence trigger | `Microsoft.Logic/workflows` (ARM CRUD, sync) restricted to a single `Recurrence` trigger + a single `Http` action; a real per-workflow firing goroutine dispatches a real HTTP POST on schedule, plus a synchronous manual `POST .../triggers/{trigger}/run` |
 
 ### Feature matrix (detail)
 
@@ -153,6 +155,17 @@ gcp-emulator's own Phase 11).
   via emulator-only `lastNotificationTime`/`lastNotificationStatus`
   fields — no retry/dead-lettering, and email/SMS/Azure Function
   receivers remain shape-only with no real delivery.
+- **Logic Apps Recurrence trigger (Phase 21)**: ✅
+  `Microsoft.Logic/workflows` (ARM CRUD, sync) — `definition.triggers`
+  restricted to exactly one `Recurrence`-type trigger and
+  `definition.actions` to exactly one `Http`-type action (anything else
+  rejected with 400); a real per-workflow goroutine dispatches a real
+  HTTP POST to the action's `uri` when the recurrence is due
+  (`internal/cronlike`, no retry/dead-lettering, same fire-and-forget
+  dispatch convention as Event Grid/Action Groups), resuming
+  automatically on server restart for any workflow left `Enabled`; ✅
+  `POST .../triggers/{trigger}/run` fires the action **synchronously**
+  and reports the outcome immediately via `lastRunStatus`/`lastRunTime`.
 
 ## Project structure
 
@@ -183,10 +196,12 @@ internal/services/eventgrid/    Microsoft.EventGrid/topics + eventSubscriptions 
 internal/services/eventhub/     Microsoft.EventHub/namespaces (ARM CRUD, async) + eventhubs/consumergroups (ARM CRUD, sync) + send/receive (path-style {namespace}.eventhub/ data-plane)
 internal/services/apimanagement/  Microsoft.ApiManagement/service (ARM CRUD, async) + apis/operations, products/subscriptions sub-resources (ARM CRUD, sync)
 internal/services/deployments/  Microsoft.Resources/deployments (ARM CRUD, async) + operations sub-resource (sync) + validate action — ARM template expression resolver + dependsOn-ordered dispatcher to other services
+internal/cronlike/              minimal recurrence evaluator (Recurrence{Frequency, Interval, StartTime}, Validate, Next) for Logic Apps' Recurrence trigger
+internal/services/logicapps/    Microsoft.Logic/workflows (ARM CRUD, sync) — single Recurrence trigger + single Http action, real per-workflow firing goroutine, synchronous manual triggers/{trigger}/run action
 internal/devtls/                self-signed TLS certificate generation/caching for the optional -tls flag
 web/console/                     minimal vanilla-JS web console (no build step), served by the binary itself
 docs/                            banner and other documentation assets
-scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator
+scripts/                         test-az-cli.sh/.ps1 — az rest smoke tests against the emulator; webhook-counter-listener.ps1/.py — minimal HTTP listeners that count real received POSTs, used by the Phase 21 smoke tests to positively confirm webhook delivery
 terraform/smoke-test/            minimal Terraform config exercising the emulator's REST endpoints via the generic http provider
 terraform/azurerm-smoke-test/    Terraform config using the real azurerm provider against the emulator (requires -tls)
 ```
@@ -397,6 +412,15 @@ This exercises, end to end against a running emulator instance:
   really created; `validate` (shape-only, creates nothing); deployment
   delete; GET on the dispatched storage account again confirming it
   survives the deployment delete; cleanup deletes.
+- **Logic Apps (Phase 21)**: workflow PUT/GET with a `Recurrence`
+  trigger (`interval: 5` seconds) and an `Http` action pointed at a
+  real local counter listener (`scripts/webhook-counter-listener.py`,
+  started by the script itself); a manual
+  `triggers/recurrence/run` confirming the listener received at least
+  1 POST immediately afterward; a 7-second wait confirming the
+  listener's counter went up *further* (proving an unprompted,
+  automatic recurrence fire actually happened, not just the manual
+  one); workflow delete; listener shutdown.
 
 ### Terraform (generic `http` provider)
 
@@ -438,7 +462,17 @@ confirming a roundtrip send/receive on the event hub, and an
 `scope` matches the product's resource ID; and an ARM/Bicep deployment
 (a `null_resource`+`local-exec` PUT templating a real storage account
 via `parameters()`/`variables()`/`resourceId()`, read back via
-`data.http.deployment` and `data.http.deployment_storage_account`).
+`data.http.deployment` and `data.http.deployment_storage_account`); and
+a Logic Apps workflow (Phase 21) — `null_resource.logicapps_workflow`
+starts a real counter listener (`scripts/webhook-counter-listener.ps1`)
+via `Start-Process` and PUTs a workflow with a `Recurrence` trigger +
+`Http` action pointed at it, `null_resource.logicapps_trigger_run`
+fires a manual trigger run, `null_resource.logicapps_verify` is a
+`local-exec` PowerShell script that `throw`s (failing the `apply`) if
+the listener's `/count` isn't at least 1 right after the manual run or
+doesn't increase further after a 7-second wait (proving a real
+automatic recurrence fire), and `null_resource.logicapps_cleanup`
+deletes the workflow and stops the listener via a PID file.
 Confirmed via a full `apply`/`destroy` cycle against a live emulator
 instance.
 
