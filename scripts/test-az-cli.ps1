@@ -1096,6 +1096,76 @@ try {
     Stop-Process -Id $ListenerProc.Id -Force -ErrorAction SilentlyContinue
 }
 
+$ApiSql = "2023-08-01-preview"
+$SqlServer = "smoketestsqlsrv"
+$SqlDb = "smoketestdb"
+$SqlFwRule = "AllowAll"
+
+$SqlServerBodyFile = New-TemporaryFile
+$SqlDbBodyFile = New-TemporaryFile
+$SqlFwBodyFile = New-TemporaryFile
+'{"location": "eastus", "properties": {"administratorLogin": "sqladmin", "administratorLoginPassword": "P@ssw0rd1234!"}}' | Set-Content -NoNewline -Path $SqlServerBodyFile
+'{"location": "eastus", "sku": {"name": "Basic"}}' | Set-Content -NoNewline -Path $SqlDbBodyFile
+'{"properties": {"startIpAddress": "0.0.0.0", "endIpAddress": "255.255.255.255"}}' | Set-Content -NoNewline -Path $SqlFwBodyFile
+
+Write-Host "-- PUT SQL server (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer`?api-version=$ApiSql" --body "@$SqlServerBodyFile"
+
+Write-Host "-- GET SQL server (fullyQualifiedDomainName determinista) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer`?api-version=$ApiSql"
+
+Write-Host "-- LIST SQL servers --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers`?api-version=$ApiSql"
+
+Write-Host "-- PUT SQL database (sub-recurso, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer/databases/$SqlDb`?api-version=$ApiSql" --body "@$SqlDbBodyFile"
+
+Write-Host "-- GET SQL database --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer/databases/$SqlDb`?api-version=$ApiSql"
+
+Write-Host "-- LIST SQL databases --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer/databases`?api-version=$ApiSql"
+
+Write-Host "-- PUT SQL firewall rule (sub-recurso, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer/firewallRules/$SqlFwRule`?api-version=$ApiSql" --body "@$SqlFwBodyFile"
+
+Write-Host "-- GET SQL firewall rule --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer/firewallRules/$SqlFwRule`?api-version=$ApiSql"
+
+Write-Host "-- LIST SQL firewall rules --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer/firewallRules`?api-version=$ApiSql"
+
+Write-Host "-- DELETE SQL firewall rule --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer/firewallRules/$SqlFwRule`?api-version=$ApiSql"
+
+Write-Host "-- DELETE SQL database --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer/databases/$SqlDb`?api-version=$ApiSql"
+
+Write-Host "-- DELETE SQL server --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Sql/servers/$SqlServer`?api-version=$ApiSql"
+
+Remove-Item -Force $SqlServerBodyFile, $SqlDbBodyFile, $SqlFwBodyFile -ErrorAction SilentlyContinue
+
+$ApiAcr = "2023-07-01"
+$AcrRegistry = "smoketestacr"
+
+$AcrBodyFile = New-TemporaryFile
+'{"location": "eastus", "sku": {"name": "Basic"}, "properties": {"adminUserEnabled": true}}' | Set-Content -NoNewline -Path $AcrBodyFile
+
+Write-Host "-- PUT Container Registry (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerRegistry/registries/$AcrRegistry`?api-version=$ApiAcr" --body "@$AcrBodyFile"
+
+Write-Host "-- GET Container Registry (loginServer determinista) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerRegistry/registries/$AcrRegistry`?api-version=$ApiAcr"
+
+Write-Host "-- LIST Container Registries --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerRegistry/registries`?api-version=$ApiAcr"
+
+Write-Host "-- DELETE Container Registry --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerRegistry/registries/$AcrRegistry`?api-version=$ApiAcr"
+
+Remove-Item -Force $AcrBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

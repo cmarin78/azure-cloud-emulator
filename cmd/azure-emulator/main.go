@@ -19,6 +19,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/authorization"
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
+	"github.com/cesarmarin/azure-emulator/internal/services/containerregistry"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
 	"github.com/cesarmarin/azure-emulator/internal/services/deployments"
 	"github.com/cesarmarin/azure-emulator/internal/services/eventgrid"
@@ -33,6 +34,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/queue"
 	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
 	"github.com/cesarmarin/azure-emulator/internal/services/servicebus"
+	"github.com/cesarmarin/azure-emulator/internal/services/sql"
 	"github.com/cesarmarin/azure-emulator/internal/services/storageaccounts"
 	"github.com/cesarmarin/azure-emulator/internal/services/table"
 	"github.com/cesarmarin/azure-emulator/internal/storage"
@@ -106,6 +108,8 @@ func main() {
 	eventHubSvc := eventhub.New(db, ops)
 	eventHubSvc.Register(srv.Mux())
 	apimanagement.New(db, ops).Register(srv.Mux())
+	sql.New(db).Register(srv.Mux())
+	containerregistry.New(db).Register(srv.Mux())
 	// logicapps dispara de verdad cualquier workflow Enabled con un trigger
 	// Recurrence válido (Fase 21) -- igual que Cloud Scheduler en
 	// gcp-emulator, su New() relanza los goroutines de disparo de cualquier

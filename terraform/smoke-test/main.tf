@@ -272,6 +272,26 @@ variable "logicapps_listener_port" {
   default = 10999
 }
 
+variable "sql_server" {
+  type    = string
+  default = "tfsmokesqlsrv"
+}
+
+variable "sql_database" {
+  type    = string
+  default = "tfsmokedb"
+}
+
+variable "sql_firewall_rule" {
+  type    = string
+  default = "AllowAll"
+}
+
+variable "acr_registry" {
+  type    = string
+  default = "tfsmokeacr"
+}
+
 # IDs de Microsoft.Network/Microsoft.Compute construidos a mano siguiendo el
 # shape estándar de ARM: como el emulador no tiene un provider azurerm real
 # (ver comentario al inicio del archivo), no hay un recurso de Terraform que
@@ -1748,4 +1768,98 @@ resource "null_resource" "logicapps_cleanup" {
     interpreter = ["PowerShell", "-Command"]
     command     = "Invoke-RestMethod -Method Delete -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Logic/workflows/${var.logicapps_workflow}?api-version=2019-05-01'; $pidFile = \"$env:TEMP/tf-smoke-listener.pid\"; if (Test-Path $pidFile) { Stop-Process -Id (Get-Content $pidFile) -Force -ErrorAction SilentlyContinue; Remove-Item $pidFile -ErrorAction SilentlyContinue }"
   }
+}
+
+# Fase 23 (SQL Database): server (ARM, síncrono, fullyQualifiedDomainName
+# determinista) + database + firewallRule (sub-recursos anidados de un solo
+# nivel, ambos síncronos -- mismo patrón que eventhub namespaces/eventhubs).
+# Mismo patrón null_resource + local-exec del resto del archivo, ya que no
+# existe un provider azurerm real detrás de este emulador (ver comentario al
+# inicio del archivo).
+resource "null_resource" "sql_server" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    server = var.sql_server
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Sql/servers/${var.sql_server}?api-version=2023-08-01-preview' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"properties\": {\"administratorLogin\": \"sqladmin\", \"administratorLoginPassword\": \"P@ssw0rd1234!\"}}'"
+  }
+}
+
+resource "null_resource" "sql_database" {
+  depends_on = [null_resource.sql_server]
+  triggers = {
+    database = var.sql_database
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Sql/servers/${var.sql_server}/databases/${var.sql_database}?api-version=2023-08-01-preview' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"sku\": {\"name\": \"Basic\"}}'"
+  }
+}
+
+resource "null_resource" "sql_firewall_rule" {
+  depends_on = [null_resource.sql_server]
+  triggers = {
+    rule = var.sql_firewall_rule
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Sql/servers/${var.sql_server}/firewallRules/${var.sql_firewall_rule}?api-version=2023-08-01-preview' -ContentType 'application/json' -Body '{\"properties\": {\"startIpAddress\": \"0.0.0.0\", \"endIpAddress\": \"255.255.255.255\"}}'"
+  }
+}
+
+data "http" "sql_server" {
+  depends_on = [null_resource.sql_server]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Sql/servers/${var.sql_server}?api-version=2023-08-01-preview"
+}
+
+data "http" "sql_database" {
+  depends_on = [null_resource.sql_database]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Sql/servers/${var.sql_server}/databases/${var.sql_database}?api-version=2023-08-01-preview"
+}
+
+data "http" "sql_firewall_rule" {
+  depends_on = [null_resource.sql_firewall_rule]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.Sql/servers/${var.sql_server}/firewallRules/${var.sql_firewall_rule}?api-version=2023-08-01-preview"
+}
+
+output "sql_server_response" {
+  value = jsondecode(data.http.sql_server.response_body)
+}
+
+output "sql_database_response" {
+  value = jsondecode(data.http.sql_database.response_body)
+}
+
+output "sql_firewall_rule_response" {
+  value = jsondecode(data.http.sql_firewall_rule.response_body)
+}
+
+# Fase 24 (Container Registry): registry (ARM, síncrono, loginServer
+# determinista -- "{name}.azurecr.io", ver fakeLoginServer en
+# internal/services/containerregistry/registries.go). Mismo patrón
+# null_resource + local-exec del resto del archivo.
+resource "null_resource" "acr_registry" {
+  depends_on = [null_resource.resource_group]
+  triggers = {
+    registry = var.acr_registry
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command     = "Invoke-RestMethod -Method Put -Uri '${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ContainerRegistry/registries/${var.acr_registry}?api-version=2023-07-01' -ContentType 'application/json' -Body '{\"location\": \"${var.location}\", \"sku\": {\"name\": \"Basic\"}, \"properties\": {\"adminUserEnabled\": true}}'"
+  }
+}
+
+data "http" "acr_registry" {
+  depends_on = [null_resource.acr_registry]
+  url        = "${var.endpoint}/subscriptions/${var.subscription_id}/resourceGroups/${var.resource_group}/providers/Microsoft.ContainerRegistry/registries/${var.acr_registry}?api-version=2023-07-01"
+}
+
+output "acr_registry_response" {
+  value = jsondecode(data.http.acr_registry.response_body)
 }

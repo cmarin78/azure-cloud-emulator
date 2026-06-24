@@ -1217,6 +1217,82 @@ echo "-- Deteniendo listener de prueba --"
 kill "${LISTENER_PID}" 2>/dev/null || true
 trap - EXIT
 
+API_SQL="2023-08-01-preview"
+SQL_SERVER="smoketestsqlsrv"
+SQL_DB="smoketestdb"
+SQL_FW_RULE="AllowAll"
+
+echo "-- PUT SQL server (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}?api-version=${API_SQL}" \
+  --body "{\"location\": \"eastus\", \"properties\": {\"administratorLogin\": \"sqladmin\", \"administratorLoginPassword\": \"P@ssw0rd1234!\"}}"
+
+echo "-- GET SQL server (fullyQualifiedDomainName determinista) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}?api-version=${API_SQL}"
+
+echo "-- LIST SQL servers --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers?api-version=${API_SQL}"
+
+echo "-- PUT SQL database (sub-recurso, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}/databases/${SQL_DB}?api-version=${API_SQL}" \
+  --body "{\"location\": \"eastus\", \"sku\": {\"name\": \"Basic\"}}"
+
+echo "-- GET SQL database --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}/databases/${SQL_DB}?api-version=${API_SQL}"
+
+echo "-- LIST SQL databases --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}/databases?api-version=${API_SQL}"
+
+echo "-- PUT SQL firewall rule (sub-recurso, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}/firewallRules/${SQL_FW_RULE}?api-version=${API_SQL}" \
+  --body "{\"properties\": {\"startIpAddress\": \"0.0.0.0\", \"endIpAddress\": \"255.255.255.255\"}}"
+
+echo "-- GET SQL firewall rule --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}/firewallRules/${SQL_FW_RULE}?api-version=${API_SQL}"
+
+echo "-- LIST SQL firewall rules --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}/firewallRules?api-version=${API_SQL}"
+
+echo "-- DELETE SQL firewall rule --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}/firewallRules/${SQL_FW_RULE}?api-version=${API_SQL}"
+
+echo "-- DELETE SQL database --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}/databases/${SQL_DB}?api-version=${API_SQL}"
+
+echo "-- DELETE SQL server --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQL_SERVER}?api-version=${API_SQL}"
+
+API_ACR="2023-07-01"
+ACR_REGISTRY="smoketestacr"
+
+echo "-- PUT Container Registry (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR_REGISTRY}?api-version=${API_ACR}" \
+  --body "{\"location\": \"eastus\", \"sku\": {\"name\": \"Basic\"}, \"properties\": {\"adminUserEnabled\": true}}"
+
+echo "-- GET Container Registry (loginServer determinista) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR_REGISTRY}?api-version=${API_ACR}"
+
+echo "-- LIST Container Registries --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries?api-version=${API_ACR}"
+
+echo "-- DELETE Container Registry --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR_REGISTRY}?api-version=${API_ACR}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

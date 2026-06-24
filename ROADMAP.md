@@ -99,7 +99,19 @@ done: a new `internal/cronlike` recurrence evaluator plus
 `Microsoft.Logic/workflows` (ARM CRUD, sync, a single `Recurrence`
 trigger and a single `Http` action that both really work) and a
 per-workflow firing goroutine that really dispatches an HTTP call on
-schedule — see Phase 21 below for details.
+schedule — see Phase 21 below for details. Phase 23 (Azure SQL
+Database) is done: `Microsoft.Sql/servers`/`databases`/`firewallRules`
+(ARM CRUD, sync, plus PATCH support on databases) and the unconditional
+sub-resources `azurerm_mssql_server`/`azurerm_mssql_database` poll on
+every refresh (`connectionPolicies`, `restorableDroppedDatabases`,
+backup retention policies, `securityAlertPolicies`,
+`transparentDataEncryption`) are implemented — see Phase 23 below for
+details, including a field-mapping bug fix (`sku_name`/
+`storage_account_type`) found only via live Terraform testing. Phase 24
+(Azure Container Registry) is done: `Microsoft.ContainerRegistry/
+registries` (ARM CRUD, sync) plus `checkNameAvailability`,
+`listCredentials`, and `replications` are implemented — see Phase 24
+below for details.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -947,6 +959,130 @@ instance of the emulator: the manual run produced exactly 1 received
 POST, and after the 7-second wait the counter had reached 2, confirming
 a genuine unprompted recurrence fire.
 
+## Phase 23 — Azure SQL Database ✅ completed
+
+Net-new service, picked from the "Phase 23+ candidate services"
+breadth list below as the first of the two highest-value, most
+commonly Terraformed candidates (alongside Container Registry). No
+real query engine: databases are ARM records carrying fake properties
+(`collation`, `maxSizeBytes`, `sku`), in keeping with the project's
+established "shape-compatible, no behavior-complete" convention for
+data planes that don't need real behavior to satisfy az CLI/Terraform.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| `Microsoft.Sql/servers` (ARM CRUD, sync) | — | `azurerm_mssql_server`; `administratorLoginPassword` accepted but never persisted/returned, same convention as `compute.OsProfile.AdminPassword` | S | done |
+| `databases` sub-resource (ARM CRUD + PATCH, sync) | servers above | `azurerm_mssql_database`; single-level nested sub-resource, same pattern as `eventhub.putHub` | M | done |
+| `firewallRules` sub-resource (ARM CRUD, sync) | servers above | `azurerm_mssql_firewall_rule`/`azurerm_sql_firewall_rule` | S | done |
+| `connectionPolicies` singleton (PUT/GET) + collection GET | servers above | `azurerm_mssql_server` PUTs this unconditionally after creating a server, even without an explicit `connection_policy` attribute; the provider's LRO poller also GETs the bare collection (not the singleton) to decide "are we done yet?" | S | done |
+| `restorableDroppedDatabases`, `backupLongTermRetentionPolicies`, `backupShortTermRetentionPolicies`, `securityAlertPolicies`, `transparentDataEncryption` (all GET-only) | databases above | `azurerm_mssql_server`/`azurerm_mssql_database`'s `Read` queries these unconditionally on every refresh/plan; without a response the provider treats the resource as broken, not just "feature unused" | S | done |
+
+Implemented in `internal/services/sql` (`servers.go`, `databases.go`,
+`firewallrules.go`, `connectionpolicy.go`, `databasepolicies.go`),
+registered in `cmd/azure-emulator/main.go` and `resourcemanager.go`'s
+`registeredNamespaces` under `Microsoft.Sql`. Servers and their two
+direct sub-resources (databases, firewallRules) are fully synchronous —
+no LRO — matching Key Vault's/Managed Identity's sync resource family
+rather than AKS's async one, since provisioning a logical SQL server
+in real Azure has no equivalent multi-minute step worth faking here.
+`databases` additionally registers a `PATCH` handler routed to the same
+`putDatabase` function as `PUT`, since the real provider uses PATCH
+(not PUT) for in-place updates such as changing `sku_name`/
+`storage_account_type` without recreating the database; `putDatabase`
+was already idempotent and preserves `creationDate` when the database
+existed before, so no new logic was needed beyond registering the
+extra method. `connectionPolicies` needed both a singleton route
+(`.../connectionPolicies/{policyName}`, normally `default`) **and** a
+bare-collection `GET .../connectionPolicies` route — discovered only
+through live Terraform testing, not from reading the provider's
+attribute schema — because `azurerm_mssql_server`'s LRO poller checks
+the collection endpoint, not the singleton, to decide whether its PUT
+finished; without the collection route the poller's GET 404s and the
+provider reports the whole operation as failed even though the
+underlying PUT had actually already succeeded.
+
+A field-mapping bug surfaced only by a full
+`destroy`/`apply`/`plan -detailed-exitcode` cycle against the real
+`azurerm` provider (not caught by any Go unit test, since the bug was
+in what JSON field name the *real* provider's Go source reads, not in
+this project's own code shape): `azurerm_mssql_database`'s `Read`
+populates the Terraform attribute `sku_name` from
+`properties.currentServiceObjectiveName` — **not** the top-level
+`sku.name` field one would reasonably assume — and populates
+`storage_account_type` from
+`properties.requestedBackupStorageRedundancy` — **not**
+`properties.currentBackupStorageRedundancy`. Confirmed directly against
+the `terraform-provider-azurerm` source
+(`mssql_database_resource.go`: `skuName = *props.CurrentServiceObjectiveName`,
+`BackupStorageRedundancy = string(*props.RequestedBackupStorageRedundancy)`).
+Without the correctly-named fields, every `terraform plan` showed a
+false `+ sku_name`/`+ storage_account_type` diff even immediately after
+a clean apply. Fixed by adding `CurrentServiceObjectiveName` (derived
+from the same `sku` value, so there's a single source of truth) and
+`RequestedBackupStorageRedundancy` to `DatabaseProperties`, alongside
+the original `CurrentBackupStorageRedundancy` field (kept in case a
+different provider version reads that one instead). Confirmed via
+`sql_test.go` (`httptest`, covering server/database/firewall-rule CRUD,
+the database PATCH path, and the policy/connection-policy sub-resource
+defaults), the az CLI smoke tests (`scripts/test-az-cli.sh`/`.ps1` —
+create server/database/firewall rule, list, get, delete), and a real
+Terraform `azurerm` provider apply/destroy cycle
+(`terraform/azurerm-smoke-test/`): a from-scratch `destroy` →
+`apply` → `plan -detailed-exitcode` run produced exit code 0 ("No
+changes. Your infrastructure matches the configuration.") with zero
+diff, the first time this kind of provider-Read field-mapping issue has
+been driven all the way to a definitively confirmed fix in this project.
+
+## Phase 24 — Azure Container Registry ✅ completed
+
+Net-new service, the second of the two phases picked from the
+candidate breadth list alongside SQL Database — ACR is one of the most
+commonly Terraformed Azure resources and, unlike AKS/Service Bus/
+Cosmos DB, needed no existing package to extend. No real image
+registry behind it (no push/pull, no manifest storage): `loginServer`
+is a deterministic fake hostname, "shape-compatible, no
+behavior-complete" like the rest of this project's simplified data
+planes.
+
+| Resource | Depends on | Why | Effort | Status |
+|---|---|---|---|---|
+| `Microsoft.ContainerRegistry/registries` (ARM CRUD, sync) | — | `azurerm_container_registry`; `loginServer` deterministically derived as `{name}.azurecr.io` (lowercase), same global-uniqueness assumption as real ACR | S | done |
+| `checkNameAvailability` (subscription-scoped action) | registries above | `azurerm_container_registry` calls this before every PUT; ACR names live in a global namespace (unlike resource-group-scoped resources), so this check is subscription-scoped, not resource-group-scoped | S | done |
+| `listCredentials` action | registries above | `azurerm_container_registry`'s `Read` calls this whenever `admin_enabled=true`, to populate `admin_username`/`admin_password` | S | done |
+| `replications` collection (GET-only) | registries above | `azurerm_container_registry`'s `Read` always queries this collection (to reconcile the `georeplications` attribute), even when geo-replication was never configured | S | done |
+
+Implemented in `internal/services/containerregistry`
+(`containerregistry.go`, `registries.go`), registered in
+`cmd/azure-emulator/main.go` and `resourcemanager.go`'s
+`registeredNamespaces` under `Microsoft.ContainerRegistry`. `registries`
+is fully synchronous, matching Key Vault's/SQL servers' sync resource
+family. `RegistryProperties` always populates `networkRuleSet`/
+`policies`/`encryption` sub-objects with "off"/empty values, even
+though the emulator enforces none of them and the chosen SKU might not
+support them in real Azure (e.g. Basic doesn't support network rules) —
+this was a deliberate design choice, not an oversight: the real
+provider's flatten functions (`flattenNetworkRuleSet`,
+`resourceContainerRegistryRead`) dereference these sub-objects and
+range over their inner slices without a nil check, so omitting them
+from the JSON causes the *provider itself* to panic with a nil-pointer
+dereference instead of failing cleanly — `ipRules`/`virtualNetworkRules`
+specifically must be present as empty arrays (`[]`), not omitted,
+for the same reason. `checkNameAvailability` doesn't simulate a real
+global ACR namespace (there isn't one behind this emulator) — it
+reports a collision only against registries that already exist in the
+same subscription, which is enough to satisfy the provider's
+pre-flight check without over-claiming real cross-tenant uniqueness
+enforcement. Confirmed via `containerregistry_test.go` (`httptest`,
+covering registry CRUD, `checkNameAvailability`'s collision detection,
+`listCredentials`'s fake credential generation, and `replications`'
+always-empty response), the az CLI smoke tests (`scripts/
+test-az-cli.sh`/`.ps1` — create registry, check name availability, list
+credentials, list, get, delete), and a real Terraform `azurerm` provider
+apply/destroy cycle (`terraform/azurerm-smoke-test/`) as part of the
+same from-scratch `destroy`/`apply`/`plan -detailed-exitcode` run
+described under Phase 23, which also exercised `acr_login_server` as a
+Terraform output and ended in a confirmed zero-diff `plan`.
+
 ## Phase 22 — Pluggable real-execution backends 💭 proposed (not yet planned)
 
 Large, optional, and explicitly lower-confidence than Phases 16-21 —
@@ -973,22 +1109,22 @@ than its Phase 12 brainstorm) once Phases 16-21 are done and there's a
 clearer sense of whether real-execution depth is actually the
 highest-value next investment versus more resource-type breadth.
 
-## Phase 23+ — candidate services to broaden coverage 💭 proposed (not yet planned)
+## Phase 25+ — candidate services to broaden coverage 💭 proposed (not yet planned)
 
-Phases 0-21 are all done; Phase 22 is an explicitly speculative
-architecture change (real backends), not a breadth play. The list below
-is the other direction: more Azure resource types, same shape-only/
-sync-CRUD-plus-the-occasional-real-behavior philosophy as everything
-shipped so far, picked by cross-referencing what's already implemented
-against what `az`/`azurerm` workflows commonly touch that this emulator
-can't fake yet. Nothing here is committed or scheduled — this is a menu
-to pick from, not a queue.
+Phases 0-21 and 23-24 are all done; Phase 22 is an explicitly
+speculative architecture change (real backends), not a breadth play.
+The list below is the other direction: more Azure resource types, same
+shape-only/sync-CRUD-plus-the-occasional-real-behavior philosophy as
+everything shipped so far, picked by cross-referencing what's already
+implemented against what `az`/`azurerm` workflows commonly touch that
+this emulator can't fake yet. Azure SQL Database and Azure Container
+Registry — formerly the top two entries here — are now implemented as
+Phase 23 and Phase 24 respectively (see above). Nothing below is
+committed or scheduled — this is a menu to pick from, not a queue.
 
 | Candidate | Why it'd be valuable | Effort | Status |
 |---|---|---|---|
-| Azure SQL Database (`Microsoft.Sql/servers`, `/databases`, firewall rules) | Probably the single most common resource in real `azurerm` configs that this emulator can't accept yet; ARM CRUD only (sync), no real query engine, same spirit as Cosmos DB's data-plane being simulated | M | proposed |
 | Azure Database for PostgreSQL/MySQL Flexible Server (`Microsoft.DBforPostgreSQL`/`Microsoft.DBforMySQL`) | Second-most-common managed-DB resource after SQL; also the natural Phase 22 "real backend candidate 2" precursor since it doesn't exist as a shape yet | M | proposed |
-| Azure Container Registry (`Microsoft.ContainerRegistry/registries`) | Pairs directly with AKS (Phase 13) and Functions/App Service container deployments; ARM CRUD plus a fake login-server hostname, no real image storage | S | proposed |
 | Azure Container Instances (`Microsoft.ContainerInstance/containerGroups`) | Common quick-deploy target in `azurerm` examples; sync ARM CRUD with a fake IP/FQDN, same depth as AKS's "shape-compatible, not behavior-complete" stance | S | proposed |
 | Redis Cache (`Microsoft.Cache/redis`) | Extremely common companion resource alongside App Service/Functions in real configs; ARM CRUD plus fake `primaryKey`/`hostName`, no real cache behind it | S | proposed |
 | Recovery Services vault (`Microsoft.RecoveryServices/vaults`) + backup policy shapes | Shows up in compliance-oriented Terraform configs; pure shape (no real backup execution), low effort since it's mostly a container resource | S | proposed |
@@ -998,14 +1134,13 @@ to pick from, not a queue.
 | Notification Hubs / SignalR Service | Rounds out the "Eventing" family from Phase 17 with two more commonly-paired-with-Functions resources; ARM CRUD only | S | proposed |
 | Private Endpoints / Private Link (extend `internal/services/network`) | The most common real-Terraform networking gap versus what Phase 12 already covers; shape-only (no real network isolation, same as everything else in `network`) | M | proposed |
 
-Suggested ordering if/when this gets picked up: SQL Database and
-Container Registry first (highest real-world frequency, lowest
-ambiguity in what "shape-only" should look like given existing
-patterns), then Redis Cache and Container Instances (small, same
-day), then the rest opportunistically. Each would follow the same
-per-phase checklist as every prior phase: implement, unit test,
-extend the `az rest` + Terraform smoke tests, update README/ROADMAP,
-scoped commit with a push command handed to the user.
+Suggested ordering if/when this gets picked up: Redis Cache and
+Container Instances first (small, same day, highest real-world
+frequency among what's left), then the rest opportunistically. Each
+would follow the same per-phase checklist as every prior phase:
+implement, unit test, extend the `az rest` + Terraform smoke tests,
+update README/ROADMAP, scoped commit with a push command handed to the
+user.
 
 ## Maintenance / cross-cutting (no fixed phase number)
 
@@ -1048,6 +1183,21 @@ useful, independent of the phase order:
   the same failure mode for other namespaces). Verified via unit tests
   plus a full clean live re-run of the four-step lifecycle, captured in
   [`docs/poc-terraform-azurerm.md`](docs/poc-terraform-azurerm.md).
+- ✅ **`internal/server/armcase.go` double-slash normalization**: a live
+  Phase 23/24 Terraform PoC surfaced that the real `azurerm` provider
+  (via `go-azure-sdk`), when built against a custom `metadata_host`,
+  sometimes concatenates a base URL already ending in `/` with a
+  resource ID that also starts with `/`, producing requests like
+  `https://host//subscriptions/...`. `net/http.ServeMux` normally
+  cleans that up itself, but does so via a 307 redirect — and
+  `go-azure-sdk` doesn't follow redirects on write requests (PUT/POST/
+  DELETE), so those calls failed outright. Fixed with a new
+  `collapseSlashes` helper, applied before ARM case normalization in
+  `withARMCaseNormalization`, that collapses any run of repeated `/`
+  into one. Verified as part of the same from-scratch
+  `destroy`/`apply`/`plan -detailed-exitcode` Terraform run described
+  under Phase 23/24, which completed with zero errors and a confirmed
+  zero-diff plan.
 
 Further phases beyond these will keep being added as unplanned phases
 once the above is solid, the same way gcp-emulator grew past its

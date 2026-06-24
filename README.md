@@ -19,10 +19,11 @@ their endpoints to `localhost`.
 ## Current status
 
 All 19 core phases below are complete, plus Phase 20 (real Action Group
-webhook delivery) and Phase 21 (Logic App Recurrence trigger, with a
-real firing goroutine). See [ROADMAP.md](ROADMAP.md) for what's planned
+webhook delivery), Phase 21 (Logic App Recurrence trigger, with a real
+firing goroutine), Phase 23 (Azure SQL Database), and Phase 24 (Azure
+Container Registry). See [ROADMAP.md](ROADMAP.md) for what's planned
 next (the rest of the behavioral/real-delivery layer inspired by
-gcp-emulator's own Phase 11).
+gcp-emulator's own Phase 11, plus more breadth candidates).
 
 | Phase | Area | What's implemented |
 |---|---|---|
@@ -47,6 +48,8 @@ gcp-emulator's own Phase 11).
 | 19 | ARM/Bicep deployments | `Microsoft.Resources/deployments` (ARM CRUD, async): resolves `parameters()`/`variables()`/`resourceId()`, orders resources by `dependsOn`, dispatches each one as a synthetic PUT to its matching existing service; `/operations` (sync), `/validate` (sync, dry-run only) |
 | 20 | Action Groups: real webhook delivery | `POST .../actionGroups/{name}/createNotifications` dispatches a real HTTP POST to each `webhookReceivers` entry; result recorded via `lastNotificationTime`/`lastNotificationStatus` (emulator-only fields) |
 | 21 | Logic Apps: Recurrence trigger | `Microsoft.Logic/workflows` (ARM CRUD, sync) restricted to a single `Recurrence` trigger + a single `Http` action; a real per-workflow firing goroutine dispatches a real HTTP POST on schedule, plus a synchronous manual `POST .../triggers/{trigger}/run` |
+| 23 | Azure SQL Database | `Microsoft.Sql/servers` + `databases` + `firewallRules` (ARM CRUD, sync), plus the singleton/collection sub-resources `azurerm_mssql_server`/`azurerm_mssql_database` poll unconditionally on every refresh: `connectionPolicies` (singleton PUT/GET + a collection GET that satisfies the provider's LRO poller), `restorableDroppedDatabases`, `backupLongTermRetentionPolicies`/`backupShortTermRetentionPolicies`, `securityAlertPolicies`, `transparentDataEncryption` — all read-only fakes with Azure's real "everything disabled" defaults |
+| 24 | Azure Container Registry | `Microsoft.ContainerRegistry/registries` (ARM CRUD, sync) plus `checkNameAvailability` (subscription-scoped), `listCredentials` (admin user fake credentials), `replications` (always empty) — `RegistryProperties` includes always-populated `networkRuleSet`/`policies`/`encryption` sub-objects because the real `azurerm` provider dereferences them without a nil check |
 
 ### Feature matrix (detail)
 
@@ -170,6 +173,42 @@ gcp-emulator's own Phase 11).
   automatically on server restart for any workflow left `Enabled`; ✅
   `POST .../triggers/{trigger}/run` fires the action **synchronously**
   and reports the outcome immediately via `lastRunStatus`/`lastRunTime`.
+- **Azure SQL Database (Phase 23)**: ✅ `Microsoft.Sql/servers` (ARM
+  CRUD, sync; `administratorLoginPassword` accepted but never persisted
+  or returned, same convention as `compute.OsProfile.AdminPassword`), ✅
+  `databases` (ARM CRUD + PATCH, sync, single-level sub-resource), ✅
+  `firewallRules` (ARM CRUD, sync). No real query engine — databases are
+  ARM records with fake properties (`collation`, `maxSizeBytes`, `sku`).
+  `azurerm_mssql_server`/`azurerm_mssql_database` poll several
+  unconditional sub-resources on every refresh that Azure real always
+  populates, all implemented as read-only fakes: ✅ `connectionPolicies`
+  (a PUT/GET singleton named `default`, plus a collection-level GET that
+  the provider's LRO poller checks instead of the singleton — without
+  it the poller sees a 404 and reports the operation as failed even
+  though it actually succeeded), ✅ `restorableDroppedDatabases`
+  (always empty, no real backups), ✅
+  `backupLongTermRetentionPolicies`/`backupShortTermRetentionPolicies`,
+  `securityAlertPolicies`, and `transparentDataEncryption` (each a
+  fixed "everything disabled" default matching real Azure's defaults).
+  A field-mapping detail worth calling out: the real provider's Read
+  populates `sku_name` from `properties.currentServiceObjectiveName`
+  and `storage_account_type` from
+  `properties.requestedBackupStorageRedundancy` — **not** from the
+  top-level `sku.name` or `properties.currentBackupStorageRedundancy`
+  one might assume; both fields are populated on every PUT/PATCH to
+  match.
+- **Azure Container Registry (Phase 24)**: ✅
+  `Microsoft.ContainerRegistry/registries` (ARM CRUD, sync;
+  `loginServer` deterministically derived as `{name}.azurecr.io`), ✅
+  `checkNameAvailability` (subscription-scoped, checks for a name
+  collision against existing registries in the same subscription), ✅
+  `listCredentials` (deterministic fake `username`/`password`/
+  `password2` when `adminUserEnabled=true`), ✅ `replications` (always
+  an empty list, no real geo-replication). `RegistryProperties` always
+  populates `networkRuleSet`/`policies`/`encryption` sub-objects (with
+  "off" values) even though the emulator doesn't enforce any of
+  them — the real provider's flatten functions dereference these
+  without a nil check and panic if they're absent from the JSON.
 
 ## Project structure
 
@@ -202,6 +241,8 @@ internal/services/apimanagement/  Microsoft.ApiManagement/service (ARM CRUD, asy
 internal/services/deployments/  Microsoft.Resources/deployments (ARM CRUD, async) + operations sub-resource (sync) + validate action — ARM template expression resolver + dependsOn-ordered dispatcher to other services
 internal/cronlike/              minimal recurrence evaluator (Recurrence{Frequency, Interval, StartTime}, Validate, Next) for Logic Apps' Recurrence trigger
 internal/services/logicapps/    Microsoft.Logic/workflows (ARM CRUD, sync) — single Recurrence trigger + single Http action, real per-workflow firing goroutine, synchronous manual triggers/{trigger}/run action
+internal/services/sql/          Microsoft.Sql/servers + databases + firewallRules (ARM CRUD, sync) + connectionPolicies/restorableDroppedDatabases/backup retention policies/securityAlertPolicies/transparentDataEncryption sub-resources
+internal/services/containerregistry/  Microsoft.ContainerRegistry/registries (ARM CRUD, sync) + checkNameAvailability/listCredentials/replications actions
 internal/devtls/                self-signed TLS certificate generation/caching for the optional -tls flag
 web/console/                     minimal vanilla-JS web console (no build step), served by the binary itself
 docs/                            banner and other documentation assets

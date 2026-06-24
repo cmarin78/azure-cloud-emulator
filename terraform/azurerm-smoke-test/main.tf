@@ -128,6 +128,41 @@ resource "azurerm_resource_group_template_deployment" "test" {
   })
 }
 
+# Fase 23 (SQL Database): server + database + firewall rule. El provider
+# azurerm real construye server_id/id a partir de la respuesta del PUT (no
+# hace falta construirlo a mano como en terraform/smoke-test/main.tf, que
+# usa el provider genérico `http`).
+resource "azurerm_mssql_server" "test" {
+  name                         = "azurermsmokesqlsrv"
+  resource_group_name          = azurerm_resource_group.test.name
+  location                     = var.location
+  version                      = "12.0"
+  administrator_login          = "sqladmin"
+  administrator_login_password = "P@ssw0rd1234!"
+}
+
+resource "azurerm_mssql_database" "test" {
+  name      = "azurermsmokedb"
+  server_id = azurerm_mssql_server.test.id
+  sku_name  = "Basic"
+}
+
+resource "azurerm_mssql_firewall_rule" "test" {
+  name             = "AllowAll"
+  server_id        = azurerm_mssql_server.test.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "255.255.255.255"
+}
+
+# Fase 24 (Container Registry).
+resource "azurerm_container_registry" "test" {
+  name                = "azurermsmokeacr"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = var.location
+  sku                 = "Basic"
+  admin_enabled       = true
+}
+
 output "subscription_id" {
   value = data.azurerm_subscription.current.subscription_id
 }
@@ -138,4 +173,16 @@ output "resource_group_id" {
 
 output "deployment_id" {
   value = azurerm_resource_group_template_deployment.test.id
+}
+
+output "sql_server_fqdn" {
+  value = azurerm_mssql_server.test.fully_qualified_domain_name
+}
+
+output "sql_database_id" {
+  value = azurerm_mssql_database.test.id
+}
+
+output "acr_login_server" {
+  value = azurerm_container_registry.test.login_server
 }

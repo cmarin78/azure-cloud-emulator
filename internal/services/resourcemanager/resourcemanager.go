@@ -175,6 +175,14 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.Logic", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "workflows", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2019-05-01"}},
 	}},
+	{Namespace: "Microsoft.Sql", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "servers", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-08-01-preview"}},
+		{ResourceType: "servers/databases", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-08-01-preview"}},
+		{ResourceType: "servers/firewallRules", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-08-01-preview"}},
+	}},
+	{Namespace: "Microsoft.ContainerRegistry", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "registries", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-07-01"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

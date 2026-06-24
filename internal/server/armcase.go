@@ -42,6 +42,8 @@ func buildArmCanonicalSegments() map[string]string {
 		"Microsoft.KeyVault",
 		"Microsoft.ServiceBus",
 		"Microsoft.DocumentDB",
+		"Microsoft.Sql",
+		"Microsoft.ContainerRegistry",
 
 		// Tipos/sub-tipos de recurso (y acciones) usados en los patrones de
 		// ruta de cada servicio.
@@ -60,6 +62,10 @@ func buildArmCanonicalSegments() map[string]string {
 		"databaseAccounts",
 		"sqlDatabases",
 		"containers",
+		"servers",
+		"databases",
+		"firewallRules",
+		"registries",
 	}
 
 	m := make(map[string]string, len(canonical))
@@ -76,8 +82,9 @@ func buildArmCanonicalSegments() map[string]string {
 // usuario) se deja exactamente como llegó.
 func withARMCaseNormalization(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		segments := strings.Split(r.URL.Path, "/")
-		changed := false
+		path := collapseSlashes(r.URL.Path)
+		segments := strings.Split(path, "/")
+		changed := path != r.URL.Path
 		for i, seg := range segments {
 			if canon, ok := armCanonicalSegments[strings.ToLower(seg)]; ok && canon != seg {
 				segments[i] = canon
@@ -89,4 +96,23 @@ func withARMCaseNormalization(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// collapseSlashes colapsa cualquier secuencia de "/" repetidos en un solo
+// "/". Existe porque el provider de Terraform `azurerm` (vía go-azure-sdk),
+// al construir requests contra un `metadata_host` personalizado, a veces
+// concatena la base URL (que ya termina en "/") con un resource ID que
+// también empieza con "/", produciendo rutas como
+// "https://host//subscriptions/...". net/http.ServeMux limpia ese tipo de
+// rutas automáticamente, pero lo hace emitiendo un redirect 307 (no 301,
+// porque PUT/POST/DELETE no son idempotentes a ojos de ServeMux) -- y
+// go-azure-sdk no sigue redirects en sus llamadas de escritura, así que
+// cualquier doble slash se traducía en un "unexpected status 307" en vez
+// de la respuesta real. Limpiar el path nosotros mismos, antes de que
+// llegue al mux, evita ese redirect por completo.
+func collapseSlashes(path string) string {
+	for strings.Contains(path, "//") {
+		path = strings.ReplaceAll(path, "//", "/")
+	}
+	return path
 }
