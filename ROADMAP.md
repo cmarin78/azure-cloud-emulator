@@ -973,6 +973,40 @@ than its Phase 12 brainstorm) once Phases 16-21 are done and there's a
 clearer sense of whether real-execution depth is actually the
 highest-value next investment versus more resource-type breadth.
 
+## Phase 23+ — candidate services to broaden coverage 💭 proposed (not yet planned)
+
+Phases 0-21 are all done; Phase 22 is an explicitly speculative
+architecture change (real backends), not a breadth play. The list below
+is the other direction: more Azure resource types, same shape-only/
+sync-CRUD-plus-the-occasional-real-behavior philosophy as everything
+shipped so far, picked by cross-referencing what's already implemented
+against what `az`/`azurerm` workflows commonly touch that this emulator
+can't fake yet. Nothing here is committed or scheduled — this is a menu
+to pick from, not a queue.
+
+| Candidate | Why it'd be valuable | Effort | Status |
+|---|---|---|---|
+| Azure SQL Database (`Microsoft.Sql/servers`, `/databases`, firewall rules) | Probably the single most common resource in real `azurerm` configs that this emulator can't accept yet; ARM CRUD only (sync), no real query engine, same spirit as Cosmos DB's data-plane being simulated | M | proposed |
+| Azure Database for PostgreSQL/MySQL Flexible Server (`Microsoft.DBforPostgreSQL`/`Microsoft.DBforMySQL`) | Second-most-common managed-DB resource after SQL; also the natural Phase 22 "real backend candidate 2" precursor since it doesn't exist as a shape yet | M | proposed |
+| Azure Container Registry (`Microsoft.ContainerRegistry/registries`) | Pairs directly with AKS (Phase 13) and Functions/App Service container deployments; ARM CRUD plus a fake login-server hostname, no real image storage | S | proposed |
+| Azure Container Instances (`Microsoft.ContainerInstance/containerGroups`) | Common quick-deploy target in `azurerm` examples; sync ARM CRUD with a fake IP/FQDN, same depth as AKS's "shape-compatible, not behavior-complete" stance | S | proposed |
+| Redis Cache (`Microsoft.Cache/redis`) | Extremely common companion resource alongside App Service/Functions in real configs; ARM CRUD plus fake `primaryKey`/`hostName`, no real cache behind it | S | proposed |
+| Recovery Services vault (`Microsoft.RecoveryServices/vaults`) + backup policy shapes | Shows up in compliance-oriented Terraform configs; pure shape (no real backup execution), low effort since it's mostly a container resource | S | proposed |
+| Azure Policy (`Microsoft.Authorization/policyDefinitions`, `/policyAssignments`) | Natural extension of the existing `internal/services/authorization` package (Phase 15) rather than a new package; no real policy evaluation, just CRUD + assignment scoping | S | proposed |
+| Storage file shares (extend `internal/services/storageaccounts`) | Storage accounts already exist; file shares are a small data-plane addition reusing the existing account/auth plumbing rather than a new service | S | proposed |
+| Static Web Apps (`Microsoft.Web/staticSites`) | Small extension of the existing App Service package (Phase 11); ARM CRUD plus a fake default hostname | S | proposed |
+| Notification Hubs / SignalR Service | Rounds out the "Eventing" family from Phase 17 with two more commonly-paired-with-Functions resources; ARM CRUD only | S | proposed |
+| Private Endpoints / Private Link (extend `internal/services/network`) | The most common real-Terraform networking gap versus what Phase 12 already covers; shape-only (no real network isolation, same as everything else in `network`) | M | proposed |
+
+Suggested ordering if/when this gets picked up: SQL Database and
+Container Registry first (highest real-world frequency, lowest
+ambiguity in what "shape-only" should look like given existing
+patterns), then Redis Cache and Container Instances (small, same
+day), then the rest opportunistically. Each would follow the same
+per-phase checklist as every prior phase: implement, unit test,
+extend the `az rest` + Terraform smoke tests, update README/ROADMAP,
+scoped commit with a push command handed to the user.
+
 ## Maintenance / cross-cutting (no fixed phase number)
 
 These aren't blocked on anything above and can be picked up whenever
