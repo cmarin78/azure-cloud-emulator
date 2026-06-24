@@ -13,6 +13,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Guard against committed binaries/local state
+        run: |
+          set -e
+          matches=$(git ls-files | grep -E '\.(exe|exe~|dll|so|dylib|db)$|(^|/)terraform\.tfstate(\.backup)?$' || true)
+          if [ -n "$matches" ]; then
+            echo "Found binary/local-state files tracked in git:"
+            echo "$matches"
+            echo "These should be gitignored, not committed. See CLEANUP.md."
+            exit 1
+          fi
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:

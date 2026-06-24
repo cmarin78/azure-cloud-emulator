@@ -236,6 +236,11 @@ process is up. Both can be overridden with `-addr`/`-db` flags or the
 `AZURE_EMULATOR_ADDR`/`AZURE_EMULATOR_DB` environment variables (the
 latter is what the Docker image uses).
 
+Building a local binary with `go build -o bin/azure-emulator
+./cmd/azure-emulator` is fine for day-to-day use, but `bin/` is
+gitignored — it's only for local builds, never for distribution or
+commits.
+
 ## Web console
 
 Once the emulator is running, visit `http://localhost:10000/` for a
