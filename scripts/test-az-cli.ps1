@@ -1230,6 +1230,71 @@ az rest --method delete `
 
 Remove-Item -Force $AciBodyFile -ErrorAction SilentlyContinue
 
+$ApiPolicy = "2021-06-01"
+$PolicyDef = "smoke-deny-public-ip"
+$PolicyAssign = "smoke-policy-assign"
+$PolicyDefBody = [System.IO.Path]::GetTempFileName()
+@"
+{
+  "properties": {
+    "policyType": "Custom",
+    "mode": "All",
+    "displayName": "Deny public IPs",
+    "policyRule": {
+      "if": { "field": "type", "equals": "Microsoft.Network/publicIPAddresses" },
+      "then": { "effect": "deny" }
+    }
+  }
+}
+"@ | Set-Content $PolicyDefBody
+
+Write-Host "-- PUT Policy Definition (policyType=Custom, mode=All) --"
+az rest --method put `
+  --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/policyDefinitions/$PolicyDef`?api-version=$ApiPolicy" `
+  --body "@$PolicyDefBody"
+
+Write-Host "-- GET Policy Definition --"
+az rest --method get `
+  --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/policyDefinitions/$PolicyDef`?api-version=$ApiPolicy"
+
+Write-Host "-- LIST Policy Definitions --"
+az rest --method get `
+  --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/policyDefinitions`?api-version=$ApiPolicy"
+
+$PolicyAssignBody = [System.IO.Path]::GetTempFileName()
+@"
+{
+  "properties": {
+    "policyDefinitionId": "/subscriptions/$Sub/providers/Microsoft.Authorization/policyDefinitions/$PolicyDef",
+    "displayName": "Smoke test assignment",
+    "enforcementMode": "Default"
+  }
+}
+"@ | Set-Content $PolicyAssignBody
+
+Write-Host "-- PUT Policy Assignment (subscription scope) --"
+az rest --method put `
+  --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/policyAssignments/$PolicyAssign`?api-version=$ApiPolicy" `
+  --body "@$PolicyAssignBody"
+
+Write-Host "-- GET Policy Assignment --"
+az rest --method get `
+  --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/policyAssignments/$PolicyAssign`?api-version=$ApiPolicy"
+
+Write-Host "-- LIST Policy Assignments --"
+az rest --method get `
+  --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/policyAssignments`?api-version=$ApiPolicy"
+
+Write-Host "-- DELETE Policy Assignment --"
+az rest --method delete `
+  --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/policyAssignments/$PolicyAssign`?api-version=$ApiPolicy"
+
+Write-Host "-- DELETE Policy Definition --"
+az rest --method delete `
+  --url "$Endpoint/subscriptions/$Sub/providers/Microsoft.Authorization/policyDefinitions/$PolicyDef`?api-version=$ApiPolicy"
+
+Remove-Item -Force $PolicyDefBody, $PolicyAssignBody -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

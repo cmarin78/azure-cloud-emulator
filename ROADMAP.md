@@ -111,7 +111,24 @@ details, including a field-mapping bug fix (`sku_name`/
 (Azure Container Registry) is done: `Microsoft.ContainerRegistry/
 registries` (ARM CRUD, sync) plus `checkNameAvailability`,
 `listCredentials`, and `replications` are implemented — see Phase 24
-below for details.
+below for details. Phase 25 (Redis Cache) is done:
+`Microsoft.Cache/redis` (ARM CRUD, sync) with SKU inside `properties`
+matching the go-azure-sdk shape so `azurerm_redis_cache` reads back
+zero drift on `sku_name`/`family`/`capacity`. Phase 26 (Azure
+Container Instances) is done: `Microsoft.ContainerInstance/
+containerGroups` (ARM CRUD, sync) with deterministic IP/FQDN via
+SHA-256 and `properties.sku` present so the `ForceNew` guard in
+`azurerm_container_group` sees no drift. Phase 27 (Azure Policy) is
+done: `Microsoft.Authorization/policyDefinitions` and
+`/policyAssignments` (ARM CRUD, both subscription and resource-group
+scope) added to the existing `internal/services/authorization` package
+— `policyRule` and `parameters` stored as raw JSON so the provider's
+normalisation round-trips without diff; built-in lookup returns 404
+so `azurerm_policy_definition` creates rather than tries to import;
+verified zero-drift with `azurerm_policy_definition` +
+`azurerm_subscription_policy_assignment` (the provider's
+`ContinuousTargetOccurence: 10` wait takes ~100s but completes
+successfully).
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -1108,6 +1125,26 @@ gcp-emulator's own committed real-execution scope ended up smaller
 than its Phase 12 brainstorm) once Phases 16-21 are done and there's a
 clearer sense of whether real-execution depth is actually the
 highest-value next investment versus more resource-type breadth.
+
+## Phase 27 — Azure Policy ✅ completed
+
+Extension of `internal/services/authorization` (Phase 15). Two new files
+(`policydefinitions.go`, `policyassignments.go`) add ARM CRUD for
+`Microsoft.Authorization/policyDefinitions` and
+`Microsoft.Authorization/policyAssignments`.
+
+**Scope coverage:**
+- Policy definitions: subscription scope (`/subscriptions/{sub}/providers/...`) plus built-in lookup at `/providers/...` (returns 404 so the azurerm provider knows to create rather than import).
+- Policy assignments: subscription scope and resource-group scope — the two scopes covering the vast majority of real-world configurations.
+
+**Key implementation details:**
+- `policyRule` and `parameters` are stored as `json.RawMessage` (raw JSON) so they round-trip through the provider's `SuppressJsonDiff` normalisation without spurious diff.
+- `policyType` defaults to `"Custom"`, `mode` defaults to `"All"`, `enforcementMode` defaults to `"Default"`.
+- No real policy evaluation — pure shape-compatible CRUD.
+
+**Provider behaviour note:** `azurerm_policy_definition` v3.x uses `ContinuousTargetOccurence: 10` + `MinTimeout: 10s` in its post-create wait, meaning apply takes ~100 seconds even though the emulator responds immediately. This is expected and matches the real Azure "eventually consistent" behaviour the provider was designed for.
+
+**Verification:** `terraform plan -detailed-exitcode` returns exit code 0 for both `azurerm_policy_definition.test` and `azurerm_subscription_policy_assignment.test`.
 
 ## Phase 25+ — candidate services to broaden coverage 💭 proposed (not yet planned)
 

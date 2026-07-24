@@ -158,6 +158,8 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.Authorization", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "roleDefinitions", Locations: []string{"global"}, ApiVersions: []string{"2022-04-01"}},
 		{ResourceType: "roleAssignments", Locations: []string{"global"}, ApiVersions: []string{"2022-04-01"}},
+		{ResourceType: "policyDefinitions", Locations: []string{"global"}, ApiVersions: []string{"2021-06-01", "2020-09-01"}},
+		{ResourceType: "policyAssignments", Locations: []string{"global"}, ApiVersions: []string{"2022-06-01", "2021-06-01"}},
 	}},
 	{Namespace: "Microsoft.ManagedIdentity", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "userAssignedIdentities", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-31"}},

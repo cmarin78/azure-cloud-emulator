@@ -184,6 +184,32 @@ resource "azurerm_container_group" "test" {
   }
 }
 
+# Fase 27 (Azure Policy).
+resource "azurerm_policy_definition" "test" {
+  name         = "deny-public-ip-smoke"
+  policy_type  = "Custom"
+  mode         = "All"
+  display_name = "Deny public IPs (smoke)"
+
+  policy_rule = jsonencode({
+    if = {
+      field  = "type"
+      equals = "Microsoft.Network/publicIPAddresses"
+    }
+    then = {
+      effect = "deny"
+    }
+  })
+}
+
+resource "azurerm_subscription_policy_assignment" "test" {
+  name                 = "deny-public-ip-assign"
+  policy_definition_id = azurerm_policy_definition.test.id
+  subscription_id      = "/subscriptions/${var.subscription_id}"
+  display_name         = "Deny public IPs assignment (smoke)"
+  enforce              = false
+}
+
 # Fase 25 (Redis Cache).
 resource "azurerm_redis_cache" "test" {
   name                = "azurermsmokereddis"
@@ -226,6 +252,14 @@ output "container_group_ip" {
 
 output "container_group_fqdn" {
   value = azurerm_container_group.test.fqdn
+}
+
+output "policy_definition_id" {
+  value = azurerm_policy_definition.test.id
+}
+
+output "policy_assignment_id" {
+  value = azurerm_subscription_policy_assignment.test.id
 }
 
 output "redis_hostname" {

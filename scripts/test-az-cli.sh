@@ -1337,6 +1337,44 @@ echo "-- DELETE Container Group --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerInstance/containerGroups/${ACI_GROUP}?api-version=${API_ACI}"
 
+API_POLICY="2021-06-01"
+POLICY_DEF="smoke-deny-public-ip"
+POLICY_ASSIGN="smoke-policy-assign"
+
+echo "-- PUT Policy Definition (policyType=Custom, mode=All) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyDefinitions/${POLICY_DEF}?api-version=${API_POLICY}" \
+  --body "{\"properties\": {\"policyType\": \"Custom\", \"mode\": \"All\", \"displayName\": \"Deny public IPs\", \"policyRule\": {\"if\": {\"field\": \"type\", \"equals\": \"Microsoft.Network/publicIPAddresses\"}, \"then\": {\"effect\": \"deny\"}}}}"
+
+echo "-- GET Policy Definition --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyDefinitions/${POLICY_DEF}?api-version=${API_POLICY}"
+
+echo "-- LIST Policy Definitions --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyDefinitions?api-version=${API_POLICY}"
+
+echo "-- PUT Policy Assignment (subscription scope) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyAssignments/${POLICY_ASSIGN}?api-version=${API_POLICY}" \
+  --body "{\"properties\": {\"policyDefinitionId\": \"/subscriptions/${SUB}/providers/Microsoft.Authorization/policyDefinitions/${POLICY_DEF}\", \"displayName\": \"Smoke test assignment\", \"enforcementMode\": \"Default\"}}"
+
+echo "-- GET Policy Assignment --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyAssignments/${POLICY_ASSIGN}?api-version=${API_POLICY}"
+
+echo "-- LIST Policy Assignments --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyAssignments?api-version=${API_POLICY}"
+
+echo "-- DELETE Policy Assignment --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyAssignments/${POLICY_ASSIGN}?api-version=${API_POLICY}"
+
+echo "-- DELETE Policy Definition --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyDefinitions/${POLICY_DEF}?api-version=${API_POLICY}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

@@ -20,10 +20,11 @@ their endpoints to `localhost`.
 
 All 19 core phases below are complete, plus Phase 20 (real Action Group
 webhook delivery), Phase 21 (Logic App Recurrence trigger, with a real
-firing goroutine), Phase 23 (Azure SQL Database), and Phase 24 (Azure
-Container Registry). See [ROADMAP.md](ROADMAP.md) for what's planned
-next (the rest of the behavioral/real-delivery layer inspired by
-gcp-emulator's own Phase 11, plus more breadth candidates).
+firing goroutine), Phase 23 (Azure SQL Database), Phase 24 (Azure
+Container Registry), Phase 25 (Redis Cache), Phase 26 (Azure Container
+Instances), and Phase 27 (Azure Policy). See [ROADMAP.md](ROADMAP.md)
+for what's planned next (the rest of the behavioral/real-delivery layer
+inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
 
 | Phase | Area | What's implemented |
 |---|---|---|
@@ -50,6 +51,9 @@ gcp-emulator's own Phase 11, plus more breadth candidates).
 | 21 | Logic Apps: Recurrence trigger | `Microsoft.Logic/workflows` (ARM CRUD, sync) restricted to a single `Recurrence` trigger + a single `Http` action; a real per-workflow firing goroutine dispatches a real HTTP POST on schedule, plus a synchronous manual `POST .../triggers/{trigger}/run` |
 | 23 | Azure SQL Database | `Microsoft.Sql/servers` + `databases` + `firewallRules` (ARM CRUD, sync), plus the singleton/collection sub-resources `azurerm_mssql_server`/`azurerm_mssql_database` poll unconditionally on every refresh: `connectionPolicies` (singleton PUT/GET + a collection GET that satisfies the provider's LRO poller), `restorableDroppedDatabases`, `backupLongTermRetentionPolicies`/`backupShortTermRetentionPolicies`, `securityAlertPolicies`, `transparentDataEncryption` — all read-only fakes with Azure's real "everything disabled" defaults |
 | 24 | Azure Container Registry | `Microsoft.ContainerRegistry/registries` (ARM CRUD, sync) plus `checkNameAvailability` (subscription-scoped), `listCredentials` (admin user fake credentials), `replications` (always empty) — `RegistryProperties` includes always-populated `networkRuleSet`/`policies`/`encryption` sub-objects because the real `azurerm` provider dereferences them without a nil check |
+| 25 | Redis Cache | `Microsoft.Cache/redis` (ARM CRUD, sync) — SKU inside `properties` matching go-azure-sdk shape so `azurerm_redis_cache` reads back zero drift on `sku_name`/`family`/`capacity`; deterministic `hostName`/`primaryKey` via SHA-256; `listKeys` action |
+| 26 | Azure Container Instances | `Microsoft.ContainerInstance/containerGroups` (ARM CRUD, sync) — deterministic IP (`10.0.{h[0]}.{h[1]}`) and FQDN (`{hex4}.{location}.azurecontainer.io`) via SHA-256; `properties.sku` present to satisfy `ForceNew` guard in `azurerm_container_group` |
+| 27 | Azure Policy | `Microsoft.Authorization/policyDefinitions` + `/policyAssignments` (ARM CRUD, both subscription and resource-group scope) — `policyRule`/`parameters` stored as raw JSON; built-in lookup returns 404; no real policy evaluation |
 
 ### Feature matrix (detail)
 
@@ -209,6 +213,30 @@ gcp-emulator's own Phase 11, plus more breadth candidates).
   "off" values) even though the emulator doesn't enforce any of
   them — the real provider's flatten functions dereference these
   without a nil check and panic if they're absent from the JSON.
+- **Redis Cache (Phase 25)**: ✅ `Microsoft.Cache/redis` (ARM CRUD,
+  sync). SKU is stored inside `properties` (not top-level) to match
+  go-azure-sdk's `RedisResource.Properties.Sku` shape — the critical
+  detail that prevents `azurerm_redis_cache` from detecting drift on
+  `sku_name`/`family`/`capacity`. Deterministic `hostName`/`primaryKey`
+  via SHA-256. `listKeys` action returns stable primary/secondary keys.
+- **Azure Container Instances (Phase 26)**: ✅
+  `Microsoft.ContainerInstance/containerGroups` (ARM CRUD, sync).
+  Deterministic public IP (`10.0.{h[0]}.{h[1]}`) and FQDN
+  (`{hex4}.{location}.azurecontainer.io`) via SHA-256 on the group
+  name. `properties.sku` defaults to `"Standard"` to satisfy the
+  `ForceNew` guard in `azurerm_container_group`.
+- **Azure Policy (Phase 27)**: ✅
+  `Microsoft.Authorization/policyDefinitions` and
+  `/policyAssignments` (ARM CRUD, subscription and resource-group scope),
+  added to `internal/services/authorization`. `policyRule` and
+  `parameters` are stored as `json.RawMessage` so they survive the
+  provider's `SuppressJsonDiff` normalisation without spurious diff.
+  Built-in definition lookup (`GET /providers/Microsoft.Authorization/
+  policyDefinitions/{name}`) returns 404 so `azurerm_policy_definition`
+  creates a custom definition rather than trying to import a built-in.
+  No real policy evaluation. Note: the provider's post-create wait uses
+  `ContinuousTargetOccurence: 10` + `MinTimeout: 10s`, so apply takes
+  ~100 seconds even with an immediately-consistent emulator.
 
 ## Project structure
 
@@ -243,6 +271,9 @@ internal/cronlike/              minimal recurrence evaluator (Recurrence{Frequen
 internal/services/logicapps/    Microsoft.Logic/workflows (ARM CRUD, sync) — single Recurrence trigger + single Http action, real per-workflow firing goroutine, synchronous manual triggers/{trigger}/run action
 internal/services/sql/          Microsoft.Sql/servers + databases + firewallRules (ARM CRUD, sync) + connectionPolicies/restorableDroppedDatabases/backup retention policies/securityAlertPolicies/transparentDataEncryption sub-resources
 internal/services/containerregistry/  Microsoft.ContainerRegistry/registries (ARM CRUD, sync) + checkNameAvailability/listCredentials/replications actions
+internal/services/redis/             Microsoft.Cache/redis (ARM CRUD, sync) + listKeys action; SKU in properties matching go-azure-sdk shape
+internal/services/containerinstances/ Microsoft.ContainerInstance/containerGroups (ARM CRUD, sync); deterministic IP/FQDN via SHA-256
+internal/services/authorization/     Microsoft.Authorization RBAC (roleDefinitions/roleAssignments) + Policy (policyDefinitions/policyAssignments)
 internal/devtls/                self-signed TLS certificate generation/caching for the optional -tls flag
 web/console/                     minimal vanilla-JS web console (no build step), served by the binary itself
 docs/                            banner and other documentation assets

@@ -44,4 +44,6 @@ func New(db *storage.DB) *Service {
 func (s *Service) Register(mux *http.ServeMux) {
 	s.registerRoleDefinitions(mux)
 	s.registerRoleAssignments(mux)
+	s.registerPolicyDefinitions(mux)
+	s.registerPolicyAssignments(mux)
 }
