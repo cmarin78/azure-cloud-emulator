@@ -163,6 +163,18 @@ resource "azurerm_container_registry" "test" {
   admin_enabled       = true
 }
 
+# Fase 25 (Redis Cache).
+resource "azurerm_redis_cache" "test" {
+  name                = "azurermsmokereddis"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = var.location
+  capacity            = 1
+  family              = "C"
+  sku_name            = "Standard"
+  enable_non_ssl_port = false
+  minimum_tls_version = "1.2"
+}
+
 output "subscription_id" {
   value = data.azurerm_subscription.current.subscription_id
 }
@@ -185,4 +197,13 @@ output "sql_database_id" {
 
 output "acr_login_server" {
   value = azurerm_container_registry.test.login_server
+}
+
+output "redis_hostname" {
+  value = azurerm_redis_cache.test.hostname
+}
+
+output "redis_primary_connection_string" {
+  value     = azurerm_redis_cache.test.primary_connection_string
+  sensitive = true
 }

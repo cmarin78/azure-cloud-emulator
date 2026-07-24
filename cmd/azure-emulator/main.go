@@ -32,6 +32,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/monitor"
 	"github.com/cesarmarin/azure-emulator/internal/services/network"
 	"github.com/cesarmarin/azure-emulator/internal/services/queue"
+	"github.com/cesarmarin/azure-emulator/internal/services/redis"
 	"github.com/cesarmarin/azure-emulator/internal/services/resourcemanager"
 	"github.com/cesarmarin/azure-emulator/internal/services/servicebus"
 	"github.com/cesarmarin/azure-emulator/internal/services/sql"
@@ -110,6 +111,7 @@ func main() {
 	apimanagement.New(db, ops).Register(srv.Mux())
 	sql.New(db).Register(srv.Mux())
 	containerregistry.New(db).Register(srv.Mux())
+	redis.New(db).Register(srv.Mux())
 	// logicapps dispara de verdad cualquier workflow Enabled con un trigger
 	// Recurrence válido (Fase 21) -- igual que Cloud Scheduler en
 	// gcp-emulator, su New() relanza los goroutines de disparo de cualquier

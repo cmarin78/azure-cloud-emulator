@@ -1166,6 +1166,29 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $AcrBodyFile -ErrorAction SilentlyContinue
 
+$ApiRedis = "2023-08-01"
+$RedisCache = "smoketestredis"
+
+$RedisBodyFile = New-TemporaryFile
+'{"location": "eastus", "sku": {"name": "Standard", "family": "C", "capacity": 1}}' | Set-Content -NoNewline -Path $RedisBodyFile
+
+Write-Host "-- PUT Redis Cache (ARM, sync) --"
+az rest --method put --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Cache/redis/$RedisCache`?api-version=$ApiRedis" --body "@$RedisBodyFile"
+
+Write-Host "-- GET Redis Cache (hostName + accessKeys deterministas) --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Cache/redis/$RedisCache`?api-version=$ApiRedis"
+
+Write-Host "-- LIST Redis Caches --"
+az rest --method get --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Cache/redis`?api-version=$ApiRedis"
+
+Write-Host "-- POST listKeys (primaryKey + connectionString deterministas) --"
+az rest --method post --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Cache/redis/$RedisCache/listKeys`?api-version=$ApiRedis"
+
+Write-Host "-- DELETE Redis Cache --"
+az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Cache/redis/$RedisCache`?api-version=$ApiRedis"
+
+Remove-Item -Force $RedisBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

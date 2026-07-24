@@ -183,6 +183,9 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.ContainerRegistry", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "registries", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-07-01"}},
 	}},
+	{Namespace: "Microsoft.Cache", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "redis", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-08-01"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

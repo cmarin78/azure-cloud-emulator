@@ -1293,6 +1293,30 @@ echo "-- DELETE Container Registry --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR_REGISTRY}?api-version=${API_ACR}"
 
+API_REDIS="2023-08-01"
+REDIS_CACHE="smoketestredis"
+
+echo "-- PUT Redis Cache (ARM, sync) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Cache/redis/${REDIS_CACHE}?api-version=${API_REDIS}" \
+  --body "{\"location\": \"eastus\", \"sku\": {\"name\": \"Standard\", \"family\": \"C\", \"capacity\": 1}}"
+
+echo "-- GET Redis Cache (hostName + accessKeys deterministas) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Cache/redis/${REDIS_CACHE}?api-version=${API_REDIS}"
+
+echo "-- LIST Redis Caches --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Cache/redis?api-version=${API_REDIS}"
+
+echo "-- POST listKeys (primaryKey + connectionString deterministas) --"
+az rest --method post \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Cache/redis/${REDIS_CACHE}/listKeys?api-version=${API_REDIS}"
+
+echo "-- DELETE Redis Cache --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Cache/redis/${REDIS_CACHE}?api-version=${API_REDIS}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"
