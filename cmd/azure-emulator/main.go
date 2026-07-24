@@ -19,6 +19,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/authorization"
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
+	"github.com/cesarmarin/azure-emulator/internal/services/containerinstances"
 	"github.com/cesarmarin/azure-emulator/internal/services/containerregistry"
 	"github.com/cesarmarin/azure-emulator/internal/services/cosmosdb"
 	"github.com/cesarmarin/azure-emulator/internal/services/deployments"
@@ -112,6 +113,7 @@ func main() {
 	sql.New(db).Register(srv.Mux())
 	containerregistry.New(db).Register(srv.Mux())
 	redis.New(db).Register(srv.Mux())
+	containerinstances.New(db).Register(srv.Mux())
 	// logicapps dispara de verdad cualquier workflow Enabled con un trigger
 	// Recurrence válido (Fase 21) -- igual que Cloud Scheduler en
 	// gcp-emulator, su New() relanza los goroutines de disparo de cualquier

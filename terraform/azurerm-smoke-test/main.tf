@@ -163,6 +163,27 @@ resource "azurerm_container_registry" "test" {
   admin_enabled       = true
 }
 
+# Fase 26 (Container Instances).
+resource "azurerm_container_group" "test" {
+  name                = "azurermsmokeci"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = var.location
+  ip_address_type     = "Public"
+  os_type             = "Linux"
+
+  container {
+    name   = "mycontainer"
+    image  = "nginx:latest"
+    cpu    = "1"
+    memory = "1.5"
+
+    ports {
+      port     = 80
+      protocol = "TCP"
+    }
+  }
+}
+
 # Fase 25 (Redis Cache).
 resource "azurerm_redis_cache" "test" {
   name                = "azurermsmokereddis"
@@ -197,6 +218,14 @@ output "sql_database_id" {
 
 output "acr_login_server" {
   value = azurerm_container_registry.test.login_server
+}
+
+output "container_group_ip" {
+  value = azurerm_container_group.test.ip_address
+}
+
+output "container_group_fqdn" {
+  value = azurerm_container_group.test.fqdn
 }
 
 output "redis_hostname" {

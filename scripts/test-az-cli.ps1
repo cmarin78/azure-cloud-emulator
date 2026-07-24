@@ -1189,6 +1189,47 @@ az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/p
 
 Remove-Item -Force $RedisBodyFile -ErrorAction SilentlyContinue
 
+$ApiAci = "2023-05-01"
+$AciGroup = "smoketestaci"
+$AciBodyFile = [System.IO.Path]::GetTempFileName()
+@"
+{
+  "location": "eastus",
+  "properties": {
+    "containers": [{
+      "name": "mycontainer",
+      "properties": {
+        "image": "nginx:latest",
+        "resources": { "requests": { "cpu": 1.0, "memoryInGB": 1.5 } },
+        "ports": [{ "port": 80, "protocol": "TCP" }]
+      }
+    }],
+    "osType": "Linux",
+    "restartPolicy": "Always",
+    "ipAddress": { "type": "Public", "ports": [{ "port": 80, "protocol": "TCP" }] }
+  }
+}
+"@ | Set-Content $AciBodyFile
+
+Write-Host "-- PUT Container Group (Linux, nginx, Public IP) --"
+az rest --method put `
+  --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerInstance/containerGroups/$AciGroup`?api-version=$ApiAci" `
+  --body "@$AciBodyFile"
+
+Write-Host "-- GET Container Group (IP + FQDN deterministas) --"
+az rest --method get `
+  --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerInstance/containerGroups/$AciGroup`?api-version=$ApiAci"
+
+Write-Host "-- LIST Container Groups --"
+az rest --method get `
+  --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerInstance/containerGroups`?api-version=$ApiAci"
+
+Write-Host "-- DELETE Container Group --"
+az rest --method delete `
+  --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.ContainerInstance/containerGroups/$AciGroup`?api-version=$ApiAci"
+
+Remove-Item -Force $AciBodyFile -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

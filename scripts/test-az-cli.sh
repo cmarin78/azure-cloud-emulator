@@ -1317,6 +1317,26 @@ echo "-- DELETE Redis Cache --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Cache/redis/${REDIS_CACHE}?api-version=${API_REDIS}"
 
+API_ACI="2023-05-01"
+ACI_GROUP="smoketestaci"
+
+echo "-- PUT Container Group (Linux, nginx, Public IP) --"
+az rest --method put \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerInstance/containerGroups/${ACI_GROUP}?api-version=${API_ACI}" \
+  --body "{\"location\": \"eastus\", \"properties\": {\"containers\": [{\"name\": \"mycontainer\", \"properties\": {\"image\": \"nginx:latest\", \"resources\": {\"requests\": {\"cpu\": 1.0, \"memoryInGB\": 1.5}}, \"ports\": [{\"port\": 80, \"protocol\": \"TCP\"}]}}], \"osType\": \"Linux\", \"restartPolicy\": \"Always\", \"ipAddress\": {\"type\": \"Public\", \"ports\": [{\"port\": 80, \"protocol\": \"TCP\"}]}}}"
+
+echo "-- GET Container Group (IP + FQDN deterministas) --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerInstance/containerGroups/${ACI_GROUP}?api-version=${API_ACI}"
+
+echo "-- LIST Container Groups --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerInstance/containerGroups?api-version=${API_ACI}"
+
+echo "-- DELETE Container Group --"
+az rest --method delete \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerInstance/containerGroups/${ACI_GROUP}?api-version=${API_ACI}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"
