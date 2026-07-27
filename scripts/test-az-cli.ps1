@@ -1295,6 +1295,51 @@ az rest --method delete `
 
 Remove-Item -Force $PolicyDefBody, $PolicyAssignBody -ErrorAction SilentlyContinue
 
+# ---- Fase 28: Storage File Shares ----
+$ApiFileShare = "2023-01-01"
+$FsAccount    = "smokestoragefs"
+$ShareName    = "smoke-fileshare"
+$FsAccountUrl = "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Storage/storageAccounts/$FsAccount"
+$ShareUrl     = "$FsAccountUrl/fileServices/default/shares/$ShareName"
+
+$FsAcctBody = [System.IO.Path]::GetTempFileName()
+@'
+{"location":"eastus","sku":{"name":"Standard_LRS"},"kind":"StorageV2"}
+'@ | Set-Content $FsAcctBody
+
+$ShareBody = [System.IO.Path]::GetTempFileName()
+@'
+{"properties":{"shareQuota":100,"enabledProtocols":"SMB","accessTier":"Hot"}}
+'@ | Set-Content $ShareBody
+
+Write-Host "-- PUT Storage Account (para file shares) --"
+az rest --method put `
+  --url "$FsAccountUrl`?api-version=$ApiFileShare" `
+  --body "@$FsAcctBody"
+
+Write-Host "-- GET fileServices/default --"
+az rest --method get `
+  --url "$FsAccountUrl/fileServices/default`?api-version=$ApiFileShare"
+
+Write-Host "-- PUT File Share --"
+az rest --method put `
+  --url "$ShareUrl`?api-version=$ApiFileShare" `
+  --body "@$ShareBody"
+
+Write-Host "-- GET File Share --"
+az rest --method get `
+  --url "$ShareUrl`?api-version=$ApiFileShare"
+
+Write-Host "-- LIST File Shares --"
+az rest --method get `
+  --url "$FsAccountUrl/fileServices/default/shares`?api-version=$ApiFileShare"
+
+Write-Host "-- DELETE File Share --"
+az rest --method delete `
+  --url "$ShareUrl`?api-version=$ApiFileShare"
+
+Remove-Item -Force $FsAcctBody, $ShareBody -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

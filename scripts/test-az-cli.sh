@@ -1375,6 +1375,39 @@ echo "-- DELETE Policy Definition --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyDefinitions/${POLICY_DEF}?api-version=${API_POLICY}"
 
+# ---- Fase 28: Storage File Shares ----
+API_FILESHARE="2023-01-01"
+FS_ACCOUNT="smokestoragefs"
+SHARE_NAME="smoke-fileshare"
+FS_ACCOUNT_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${FS_ACCOUNT}"
+SHARE_URL="${FS_ACCOUNT_URL}/fileServices/default/shares/${SHARE_NAME}"
+
+echo "-- PUT Storage Account (para file shares) --"
+az rest --method put \
+  --url "${FS_ACCOUNT_URL}?api-version=${API_FILESHARE}" \
+  --body '{"location":"eastus","sku":{"name":"Standard_LRS"},"kind":"StorageV2"}'
+
+echo "-- GET fileServices/default --"
+az rest --method get \
+  --url "${FS_ACCOUNT_URL}/fileServices/default?api-version=${API_FILESHARE}"
+
+echo "-- PUT File Share --"
+az rest --method put \
+  --url "${SHARE_URL}?api-version=${API_FILESHARE}" \
+  --body '{"properties":{"shareQuota":100,"enabledProtocols":"SMB","accessTier":"Hot"}}'
+
+echo "-- GET File Share --"
+az rest --method get \
+  --url "${SHARE_URL}?api-version=${API_FILESHARE}"
+
+echo "-- LIST File Shares --"
+az rest --method get \
+  --url "${FS_ACCOUNT_URL}/fileServices/default/shares?api-version=${API_FILESHARE}"
+
+echo "-- DELETE File Share --"
+az rest --method delete \
+  --url "${SHARE_URL}?api-version=${API_FILESHARE}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

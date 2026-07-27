@@ -95,6 +95,9 @@ func (s *Service) Register(mux *http.ServeMux) {
 		s.getStorageAccount)
 	mux.HandleFunc("DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}",
 		s.deleteStorageAccount)
+
+	// Fase 28: File Services y File Shares.
+	s.registerFileShares(mux)
 }
 
 func storageAccountKey(subID, rg, name string) string {

@@ -210,6 +210,21 @@ resource "azurerm_subscription_policy_assignment" "test" {
   enforce              = false
 }
 
+# Fase 28 (Storage File Shares).
+resource "azurerm_storage_account" "fileshare_test" {
+  name                     = "azurermsmokefsacct"
+  resource_group_name      = azurerm_resource_group.test.name
+  location                 = var.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
+
+resource "azurerm_storage_share" "test" {
+  name                 = "azurermsmokefileshare"
+  storage_account_name = azurerm_storage_account.fileshare_test.name
+  quota                = 50
+}
+
 # Fase 25 (Redis Cache).
 resource "azurerm_redis_cache" "test" {
   name                = "azurermsmokereddis"
@@ -260,6 +275,10 @@ output "policy_definition_id" {
 
 output "policy_assignment_id" {
   value = azurerm_subscription_policy_assignment.test.id
+}
+
+output "file_share_id" {
+  value = azurerm_storage_share.test.id
 }
 
 output "redis_hostname" {

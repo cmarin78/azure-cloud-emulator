@@ -22,7 +22,8 @@ All 19 core phases below are complete, plus Phase 20 (real Action Group
 webhook delivery), Phase 21 (Logic App Recurrence trigger, with a real
 firing goroutine), Phase 23 (Azure SQL Database), Phase 24 (Azure
 Container Registry), Phase 25 (Redis Cache), Phase 26 (Azure Container
-Instances), and Phase 27 (Azure Policy). See [ROADMAP.md](ROADMAP.md)
+Instances), Phase 27 (Azure Policy), and Phase 28 (Storage File Shares).
+See [ROADMAP.md](ROADMAP.md)
 for what's planned next (the rest of the behavioral/real-delivery layer
 inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
 
@@ -54,6 +55,7 @@ inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
 | 25 | Redis Cache | `Microsoft.Cache/redis` (ARM CRUD, sync) — SKU inside `properties` matching go-azure-sdk shape so `azurerm_redis_cache` reads back zero drift on `sku_name`/`family`/`capacity`; deterministic `hostName`/`primaryKey` via SHA-256; `listKeys` action |
 | 26 | Azure Container Instances | `Microsoft.ContainerInstance/containerGroups` (ARM CRUD, sync) — deterministic IP (`10.0.{h[0]}.{h[1]}`) and FQDN (`{hex4}.{location}.azurecontainer.io`) via SHA-256; `properties.sku` present to satisfy `ForceNew` guard in `azurerm_container_group` |
 | 27 | Azure Policy | `Microsoft.Authorization/policyDefinitions` + `/policyAssignments` (ARM CRUD, both subscription and resource-group scope) — `policyRule`/`parameters` stored as raw JSON; built-in lookup returns 404; no real policy evaluation |
+| 28 | Storage File Shares | `Microsoft.Storage/storageAccounts/fileServices` (GET list/singleton, PUT singleton) + `/fileServices/default/shares` (ARM CRUD) — `shareQuota`, `enabledProtocols` (SMB/NFS, default SMB), `accessTier` (default TransactionOptimized), `metadata`; verified with `azurerm_storage_share` |
 
 ### Feature matrix (detail)
 
@@ -237,6 +239,16 @@ inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
   No real policy evaluation. Note: the provider's post-create wait uses
   `ContinuousTargetOccurence: 10` + `MinTimeout: 10s`, so apply takes
   ~100 seconds even with an immediately-consistent emulator.
+- **Storage File Shares (Phase 28)**: ✅
+  `fileServices` sub-resource on every storage account: ✅
+  `GET .../fileServices` (always returns the singleton `default`
+  entry), ✅ `GET`/`PUT .../fileServices/default` (file service
+  properties, emulator returns `shareDeleteRetentionPolicy.enabled=false`
+  and accepts PUT without error), ✅ `GET`/`PUT`/`DELETE
+  .../fileServices/default/shares/{name}` — `shareQuota` (default 5120
+  GB), `enabledProtocols` (SMB/NFS, default SMB), `accessTier`
+  (default TransactionOptimized), `metadata`; verified with
+  `azurerm_storage_share` (zero-drift plan, no async wait needed).
 
 ## Project structure
 
@@ -245,7 +257,7 @@ cmd/azure-emulator/             entry point, wires up storage + server, listens 
 internal/storage/               embedded persistence (BoltDB)
 internal/server/                router, middlewares, ARM parsing, LRO helper, JSON/error helpers, /healthz
 internal/services/resourcemanager/  fake subscriptions + resource group CRUD
-internal/services/storageaccounts/  Microsoft.Storage/storageAccounts ARM CRUD (control plane only)
+internal/services/storageaccounts/  Microsoft.Storage/storageAccounts ARM CRUD (control plane) + fileServices/shares (Phase 28)
 internal/services/blob/         Blob containers/blobs data-plane (path-style {account}.blob/ endpoint)
 internal/services/queue/        Queue storage data-plane (path-style {account}.queue/ endpoint)
 internal/services/table/        Table storage data-plane (path-style {account}.table/ endpoint)
@@ -261,7 +273,7 @@ internal/services/functions/    Microsoft.Web/sites/functions sub-resource (ARM 
 internal/services/armmeta/      fake ARM metadata document (/metadata/endpoints) so az CLI/azurerm can discover this emulator as a custom cloud
 internal/services/aadtoken/     fake Azure AD token issuer (/login/{tenant}/oauth2/v2.0/token) accepting any client_id/secret
 internal/services/graph/        Microsoft Graph stub: applications + servicePrincipals (POST/GET/$filter auto-discovery) so azurerm can resolve a service principal's object ID
-internal/services/authorization/  Microsoft.Authorization/roleDefinitions + roleAssignments (ARM CRUD, sync, scope-isolated subscription/resource-group storage)
+internal/services/authorization/  Microsoft.Authorization RBAC (roleDefinitions/roleAssignments) + Policy (policyDefinitions/policyAssignments)
 internal/services/managedidentity/  Microsoft.ManagedIdentity/userAssignedIdentities (ARM CRUD, sync)
 internal/services/eventgrid/    Microsoft.EventGrid/topics + eventSubscriptions (ARM CRUD, sync) + publish (path-style {topic}.eventgrid/ data-plane, real webhook delivery)
 internal/services/eventhub/     Microsoft.EventHub/namespaces (ARM CRUD, async) + eventhubs/consumergroups (ARM CRUD, sync) + send/receive (path-style {namespace}.eventhub/ data-plane)

@@ -128,7 +128,13 @@ so `azurerm_policy_definition` creates rather than tries to import;
 verified zero-drift with `azurerm_policy_definition` +
 `azurerm_subscription_policy_assignment` (the provider's
 `ContinuousTargetOccurence: 10` wait takes ~100s but completes
-successfully).
+successfully). Phase 28 (Storage File Shares) is done: the existing
+`internal/services/storageaccounts` package is extended with
+`fileshares.go` that adds `fileServices` (GET list, GET/PUT default
+singleton) and `fileServices/default/shares/{name}` (full ARM CRUD) to
+every storage account — `shareQuota` (default 5120 GB), `enabledProtocols`
+(SMB/NFS, default SMB), `accessTier` (default TransactionOptimized),
+and `metadata`; verified zero-drift with `azurerm_storage_share`.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -1146,6 +1152,33 @@ Extension of `internal/services/authorization` (Phase 15). Two new files
 
 **Verification:** `terraform plan -detailed-exitcode` returns exit code 0 for both `azurerm_policy_definition.test` and `azurerm_subscription_policy_assignment.test`.
 
+## Phase 28 — Storage File Shares ✅ completed
+
+Extension of `internal/services/storageaccounts` (Phase 3). New file
+`fileshares.go` adds the `fileServices` sub-resource and file shares
+to every storage account.
+
+**Routes added:**
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `.../fileServices` | List file services (always returns the singleton `default`) |
+| `GET` | `.../fileServices/default` | Get file service properties |
+| `PUT` | `.../fileServices/default` | Update file service properties (accepted, returns default) |
+| `GET` | `.../fileServices/default/shares` | List shares for this account |
+| `PUT` | `.../fileServices/default/shares/{name}` | Create/update share |
+| `GET` | `.../fileServices/default/shares/{name}` | Get share |
+| `DELETE` | `.../fileServices/default/shares/{name}` | Delete share (idempotent) |
+
+**Key implementation details:**
+- `shareQuota` defaults to 5120 GB (Azure's own default for transaction-optimized tier).
+- `enabledProtocols` defaults to `"SMB"` (NFSv4.1 is the other valid value but requires special network config in real Azure).
+- `accessTier` defaults to `"TransactionOptimized"` (matches Azure's default for LRS/GRS accounts).
+- Share keys are prefixed `{sub}/{rg}/{account}/` so shares belonging to different accounts never appear in each other's lists.
+- `fileServices/default` is always returned (even if the storage account was created before this phase) — the file service singleton exists implicitly for every storage account.
+
+**Verification:** `azurerm_storage_share` apply + plan returns exit code 0 (zero drift). No async wait in the provider for shares — `PUT` returns 201 immediately.
+
 ## Phase 25+ — candidate services to broaden coverage 💭 proposed (not yet planned)
 
 Phases 0-21 and 23-24 are all done; Phase 22 is an explicitly
@@ -1166,7 +1199,7 @@ committed or scheduled — this is a menu to pick from, not a queue.
 | Redis Cache (`Microsoft.Cache/redis`) | Extremely common companion resource alongside App Service/Functions in real configs; ARM CRUD plus fake `primaryKey`/`hostName`, no real cache behind it | S | proposed |
 | Recovery Services vault (`Microsoft.RecoveryServices/vaults`) + backup policy shapes | Shows up in compliance-oriented Terraform configs; pure shape (no real backup execution), low effort since it's mostly a container resource | S | proposed |
 | Azure Policy (`Microsoft.Authorization/policyDefinitions`, `/policyAssignments`) | Natural extension of the existing `internal/services/authorization` package (Phase 15) rather than a new package; no real policy evaluation, just CRUD + assignment scoping | S | proposed |
-| Storage file shares (extend `internal/services/storageaccounts`) | Storage accounts already exist; file shares are a small data-plane addition reusing the existing account/auth plumbing rather than a new service | S | proposed |
+| Storage file shares (extend `internal/services/storageaccounts`) | Storage accounts already exist; file shares are a small data-plane addition reusing the existing account/auth plumbing rather than a new service | S | ✅ done (Phase 28) |
 | Static Web Apps (`Microsoft.Web/staticSites`) | Small extension of the existing App Service package (Phase 11); ARM CRUD plus a fake default hostname | S | proposed |
 | Notification Hubs / SignalR Service | Rounds out the "Eventing" family from Phase 17 with two more commonly-paired-with-Functions resources; ARM CRUD only | S | proposed |
 | Private Endpoints / Private Link (extend `internal/services/network`) | The most common real-Terraform networking gap versus what Phase 12 already covers; shape-only (no real network isolation, same as everything else in `network`) | M | proposed |
