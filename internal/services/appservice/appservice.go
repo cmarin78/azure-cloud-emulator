@@ -44,4 +44,5 @@ func New(db *storage.DB) *Service {
 func (s *Service) Register(mux *http.ServeMux) {
 	s.registerPlans(mux)
 	s.registerSites(mux)
+	s.registerStaticWebApps(mux) // Fase 29
 }

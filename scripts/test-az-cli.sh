@@ -1375,6 +1375,32 @@ echo "-- DELETE Policy Definition --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/providers/Microsoft.Authorization/policyDefinitions/${POLICY_DEF}?api-version=${API_POLICY}"
 
+# ---- Fase 29: Static Web Apps ----
+API_STATIC="2022-09-01"
+STATIC_SITE="smoke-static-site"
+STATIC_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/staticSites/${STATIC_SITE}"
+
+echo "-- PUT Static Site --"
+az rest --method put \
+  --url "${STATIC_URL}?api-version=${API_STATIC}" \
+  --body '{"location":"eastus2","sku":{"name":"Free","tier":"Free"}}'
+
+echo "-- GET Static Site --"
+az rest --method get \
+  --url "${STATIC_URL}?api-version=${API_STATIC}"
+
+echo "-- POST listSecrets --"
+az rest --method post \
+  --url "${STATIC_URL}/listSecrets?api-version=${API_STATIC}"
+
+echo "-- LIST Static Sites --"
+az rest --method get \
+  --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/staticSites?api-version=${API_STATIC}"
+
+echo "-- DELETE Static Site --"
+az rest --method delete \
+  --url "${STATIC_URL}?api-version=${API_STATIC}"
+
 # ---- Fase 28: Storage File Shares ----
 API_FILESHARE="2023-01-01"
 FS_ACCOUNT="smokestoragefs"

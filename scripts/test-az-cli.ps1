@@ -1295,6 +1295,39 @@ az rest --method delete `
 
 Remove-Item -Force $PolicyDefBody, $PolicyAssignBody -ErrorAction SilentlyContinue
 
+# ---- Fase 29: Static Web Apps ----
+$ApiStatic = "2022-09-01"
+$StaticSite = "smoke-static-site"
+$StaticUrl  = "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/staticSites/$StaticSite"
+
+$StaticBody = [System.IO.Path]::GetTempFileName()
+@'
+{"location":"eastus2","sku":{"name":"Free","tier":"Free"}}
+'@ | Set-Content $StaticBody
+
+Write-Host "-- PUT Static Site --"
+az rest --method put `
+  --url "$StaticUrl`?api-version=$ApiStatic" `
+  --body "@$StaticBody"
+
+Write-Host "-- GET Static Site --"
+az rest --method get `
+  --url "$StaticUrl`?api-version=$ApiStatic"
+
+Write-Host "-- POST listSecrets --"
+az rest --method post `
+  --url "$StaticUrl/listSecrets`?api-version=$ApiStatic"
+
+Write-Host "-- LIST Static Sites --"
+az rest --method get `
+  --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/staticSites`?api-version=$ApiStatic"
+
+Write-Host "-- DELETE Static Site --"
+az rest --method delete `
+  --url "$StaticUrl`?api-version=$ApiStatic"
+
+Remove-Item -Force $StaticBody -ErrorAction SilentlyContinue
+
 # ---- Fase 28: Storage File Shares ----
 $ApiFileShare = "2023-01-01"
 $FsAccount    = "smokestoragefs"

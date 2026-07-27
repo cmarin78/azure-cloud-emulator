@@ -210,6 +210,15 @@ resource "azurerm_subscription_policy_assignment" "test" {
   enforce              = false
 }
 
+# Fase 29 (Static Web Apps).
+resource "azurerm_static_web_app" "test" {
+  name                = "azurermsmokestaticsite"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = "eastus2"
+  sku_tier            = "Free"
+  sku_size            = "Free"
+}
+
 # Fase 28 (Storage File Shares).
 resource "azurerm_storage_account" "fileshare_test" {
   name                     = "azurermsmokefsacct"
@@ -275,6 +284,10 @@ output "policy_definition_id" {
 
 output "policy_assignment_id" {
   value = azurerm_subscription_policy_assignment.test.id
+}
+
+output "static_site_default_host_name" {
+  value = azurerm_static_web_app.test.default_host_name
 }
 
 output "file_share_id" {

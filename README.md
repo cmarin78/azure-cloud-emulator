@@ -22,8 +22,8 @@ All 19 core phases below are complete, plus Phase 20 (real Action Group
 webhook delivery), Phase 21 (Logic App Recurrence trigger, with a real
 firing goroutine), Phase 23 (Azure SQL Database), Phase 24 (Azure
 Container Registry), Phase 25 (Redis Cache), Phase 26 (Azure Container
-Instances), Phase 27 (Azure Policy), and Phase 28 (Storage File Shares).
-See [ROADMAP.md](ROADMAP.md)
+Instances), Phase 27 (Azure Policy), Phase 28 (Storage File Shares), and
+Phase 29 (Static Web Apps). See [ROADMAP.md](ROADMAP.md)
 for what's planned next (the rest of the behavioral/real-delivery layer
 inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
 
@@ -56,6 +56,7 @@ inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
 | 26 | Azure Container Instances | `Microsoft.ContainerInstance/containerGroups` (ARM CRUD, sync) — deterministic IP (`10.0.{h[0]}.{h[1]}`) and FQDN (`{hex4}.{location}.azurecontainer.io`) via SHA-256; `properties.sku` present to satisfy `ForceNew` guard in `azurerm_container_group` |
 | 27 | Azure Policy | `Microsoft.Authorization/policyDefinitions` + `/policyAssignments` (ARM CRUD, both subscription and resource-group scope) — `policyRule`/`parameters` stored as raw JSON; built-in lookup returns 404; no real policy evaluation |
 | 28 | Storage File Shares | `Microsoft.Storage/storageAccounts/fileServices` (GET list/singleton, PUT singleton) + `/fileServices/default/shares` (ARM CRUD) — `shareQuota`, `enabledProtocols` (SMB/NFS, default SMB), `accessTier` (default TransactionOptimized), `metadata`; verified with `azurerm_storage_share` |
+| 29 | Static Web Apps | `Microsoft.Web/staticSites` (ARM CRUD, sync) + `POST .../listSecrets` (returns deterministic fake `apiKey`) — deterministic `defaultHostname` as `{name}.azurestaticapps.net`; `sku.name/tier` (default Free); no real deployment pipeline |
 
 ### Feature matrix (detail)
 
@@ -239,6 +240,13 @@ inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
   No real policy evaluation. Note: the provider's post-create wait uses
   `ContinuousTargetOccurence: 10` + `MinTimeout: 10s`, so apply takes
   ~100 seconds even with an immediately-consistent emulator.
+- **Static Web Apps (Phase 29)**: ✅ `Microsoft.Web/staticSites`
+  (ARM CRUD, sync, added to `internal/services/appservice`) — `GET`/
+  `PUT`/`DELETE`/`LIST`; `POST .../listSecrets` returns a deterministic
+  fake `apiKey` so `azurerm_static_web_app`'s Read can populate the
+  `api_key` attribute without drift; `defaultHostname` is
+  `{name}.azurestaticapps.net`; `sku.name`/`sku.tier` default to
+  `"Free"`. No real static-site build pipeline or CDN behind it.
 - **Storage File Shares (Phase 28)**: ✅
   `fileServices` sub-resource on every storage account: ✅
   `GET .../fileServices` (always returns the singleton `default`
@@ -267,7 +275,7 @@ internal/services/keyvault/     Microsoft.KeyVault/vaults (ARM CRUD) + secrets/k
 internal/services/servicebus/   Microsoft.ServiceBus/namespaces, queues, topics/subscriptions (ARM CRUD) + messaging (path-style {namespace}.servicebus/ data-plane)
 internal/services/cosmosdb/     Microsoft.DocumentDB/databaseAccounts, sqlDatabases, containers (ARM CRUD) + documents (path-style {account}.documents/ data-plane)
 internal/services/monitor/      Microsoft.OperationalInsights/workspaces + Microsoft.Insights/actionGroups, metricAlerts (ARM CRUD) + Log Analytics Query stub (POST /v1/workspaces/{id}/query)
-internal/services/appservice/   Microsoft.Web/serverfarms (App Service Plans) + sites (Web Apps, ARM CRUD) + start/stop/restart actions + config/appsettings sub-resource
+internal/services/appservice/   Microsoft.Web/serverfarms (App Service Plans) + sites (Web Apps, ARM CRUD) + start/stop/restart actions + config/appsettings sub-resource + staticSites (Phase 29)
 internal/services/aks/          Microsoft.ContainerService/managedClusters (ARM CRUD, async) + agentPools sub-resource (ARM CRUD, async) + listClusterUserCredential/listClusterAdminCredential actions
 internal/services/functions/    Microsoft.Web/sites/functions sub-resource (ARM CRUD, sync) + syncfunctiontriggers/host/default/listkeys actions (Function App site itself is handled by appservice)
 internal/services/armmeta/      fake ARM metadata document (/metadata/endpoints) so az CLI/azurerm can discover this emulator as a custom cloud

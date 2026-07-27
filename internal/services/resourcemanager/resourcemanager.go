@@ -151,6 +151,7 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.Web", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "serverfarms", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
 		{ResourceType: "sites", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
+		{ResourceType: "staticSites", Locations: []string{"eastus2", "westus2", "centralus"}, ApiVersions: []string{"2022-09-01", "2021-02-01"}},
 	}},
 	{Namespace: "Microsoft.ContainerService", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "managedClusters", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2024-01-01"}},

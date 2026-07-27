@@ -134,7 +134,13 @@ successfully). Phase 28 (Storage File Shares) is done: the existing
 singleton) and `fileServices/default/shares/{name}` (full ARM CRUD) to
 every storage account — `shareQuota` (default 5120 GB), `enabledProtocols`
 (SMB/NFS, default SMB), `accessTier` (default TransactionOptimized),
-and `metadata`; verified zero-drift with `azurerm_storage_share`.
+and `metadata`; verified zero-drift with `azurerm_storage_share`. Phase 29
+(Static Web Apps) is done: `staticwebapps.go` added to
+`internal/services/appservice` — ARM CRUD for `Microsoft.Web/staticSites`
+plus `POST .../listSecrets` returning a deterministic fake `apiKey`;
+`defaultHostname` is `{name}.azurestaticapps.net`; `sku` defaults to Free.
+Four unit tests (CRUD, listSecrets, defaults, apiKey stability) all pass;
+live smoke test confirms 201/200/204/404 on the expected paths.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
@@ -1152,6 +1158,33 @@ Extension of `internal/services/authorization` (Phase 15). Two new files
 
 **Verification:** `terraform plan -detailed-exitcode` returns exit code 0 for both `azurerm_policy_definition.test` and `azurerm_subscription_policy_assignment.test`.
 
+## Phase 29 — Static Web Apps ✅ completed
+
+Extension of `internal/services/appservice` (Phase 11). New file
+`staticwebapps.go` adds ARM CRUD for `Microsoft.Web/staticSites` plus
+the `listSecrets` action the `azurerm_static_web_app` provider calls
+in Read to populate `api_key`.
+
+**Routes added:**
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `.../staticSites` | List static sites in resource group |
+| `PUT` | `.../staticSites/{name}` | Create/update static site (201/200) |
+| `GET` | `.../staticSites/{name}` | Get static site |
+| `DELETE` | `.../staticSites/{name}` | Delete static site (idempotent 204) |
+| `POST` | `.../staticSites/{name}/listSecrets` | Returns deterministic fake `apiKey` |
+
+**Key implementation details:**
+- `defaultHostname` is always `{name}.azurestaticapps.net` — deterministic and stable across GET calls.
+- `apiKey` (from `listSecrets`) is a deterministic fake string derived from the site name — same value on every call, so Terraform plans show zero drift.
+- `sku.name`/`sku.tier` default to `"Free"` when not provided.
+- No real static-site build, CDN, or deployment pipeline — pure shape-compatible ARM CRUD.
+
+**Provider note:** `azurerm_static_web_app` (v3) calls `listSecrets` as a POST during every Read. The emulator handles this at `POST .../listSecrets?api-version=2022-09-01`.
+
+**Verification:** 4 unit tests pass (CRUD, listSecrets, defaults, apiKey stability). Live smoke test confirms correct HTTP status codes on all paths.
+
 ## Phase 28 — Storage File Shares ✅ completed
 
 Extension of `internal/services/storageaccounts` (Phase 3). New file
@@ -1200,7 +1233,7 @@ committed or scheduled — this is a menu to pick from, not a queue.
 | Recovery Services vault (`Microsoft.RecoveryServices/vaults`) + backup policy shapes | Shows up in compliance-oriented Terraform configs; pure shape (no real backup execution), low effort since it's mostly a container resource | S | proposed |
 | Azure Policy (`Microsoft.Authorization/policyDefinitions`, `/policyAssignments`) | Natural extension of the existing `internal/services/authorization` package (Phase 15) rather than a new package; no real policy evaluation, just CRUD + assignment scoping | S | proposed |
 | Storage file shares (extend `internal/services/storageaccounts`) | Storage accounts already exist; file shares are a small data-plane addition reusing the existing account/auth plumbing rather than a new service | S | ✅ done (Phase 28) |
-| Static Web Apps (`Microsoft.Web/staticSites`) | Small extension of the existing App Service package (Phase 11); ARM CRUD plus a fake default hostname | S | proposed |
+| Static Web Apps (`Microsoft.Web/staticSites`) | Small extension of the existing App Service package (Phase 11); ARM CRUD plus a fake default hostname | S | ✅ done (Phase 29) |
 | Notification Hubs / SignalR Service | Rounds out the "Eventing" family from Phase 17 with two more commonly-paired-with-Functions resources; ARM CRUD only | S | proposed |
 | Private Endpoints / Private Link (extend `internal/services/network`) | The most common real-Terraform networking gap versus what Phase 12 already covers; shape-only (no real network isolation, same as everything else in `network`) | M | proposed |
 
