@@ -234,6 +234,53 @@ resource "azurerm_storage_share" "test" {
   quota                = 50
 }
 
+# Fase 30 (PostgreSQL Flexible Server).
+resource "azurerm_postgresql_flexible_server" "test" {
+  name                   = "azurermsmokepostgres"
+  resource_group_name    = azurerm_resource_group.test.name
+  location               = var.location
+  version                = "16"
+  administrator_login    = "pgadmin"
+  administrator_password = "P@ssw0rd1234!"
+  storage_mb             = 32768
+  sku_name               = "B_Standard_B1ms"
+  backup_retention_days  = 7
+}
+
+resource "azurerm_postgresql_flexible_server_database" "test" {
+  name      = "azurermsmokepgdb"
+  server_id = azurerm_postgresql_flexible_server.test.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
+}
+
+resource "azurerm_postgresql_flexible_server_firewall_rule" "test" {
+  name             = "AllowAll"
+  server_id        = azurerm_postgresql_flexible_server.test.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "255.255.255.255"
+}
+
+# Fase 30 (MySQL Flexible Server).
+resource "azurerm_mysql_flexible_server" "test" {
+  name                   = "azurermsmokemysql"
+  resource_group_name    = azurerm_resource_group.test.name
+  location               = var.location
+  administrator_login    = "mysqladmin"
+  administrator_password = "P@ssw0rd1234!"
+  sku_name               = "B_Standard_B1ms"
+  version                = "8.0.21"
+  backup_retention_days  = 7
+}
+
+resource "azurerm_mysql_flexible_database" "test" {
+  name                = "azurermsmokemydb"
+  resource_group_name = azurerm_resource_group.test.name
+  server_name         = azurerm_mysql_flexible_server.test.name
+  charset             = "utf8mb4"
+  collation           = "utf8mb4_unicode_ci"
+}
+
 # Fase 31 (Recovery Services Vault).
 resource "azurerm_recovery_services_vault" "test" {
   name                = "azurermsmokersvault"
@@ -300,6 +347,18 @@ output "static_site_default_host_name" {
 
 output "file_share_id" {
   value = azurerm_storage_share.test.id
+}
+
+output "postgresql_fqdn" {
+  value = azurerm_postgresql_flexible_server.test.fqdn
+}
+
+output "postgresql_db_id" {
+  value = azurerm_postgresql_flexible_server_database.test.id
+}
+
+output "mysql_fqdn" {
+  value = azurerm_mysql_flexible_server.test.fqdn
 }
 
 output "recovery_vault_id" {

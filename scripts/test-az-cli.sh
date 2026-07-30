@@ -1459,6 +1459,59 @@ az rest --method get --url "${VAULT_URL}/backupStorageConfig/vaultStorageConfig?
 echo "-- DELETE Vault --"
 az rest --method delete --url "${VAULT_URL}?api-version=${API_RSV}"
 
+# ---- Fase 30: PostgreSQL Flexible Server ----
+API_PG="2022-12-01"
+PG_SRV="smoke-pg"
+PG_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DBforPostgreSQL/flexibleServers/${PG_SRV}"
+
+echo "-- PUT PostgreSQL Flexible Server --"
+az rest --method put \
+  --url "${PG_URL}?api-version=${API_PG}" \
+  --body '{"location":"eastus","sku":{"name":"B_Standard_B1ms"},"properties":{"administratorLogin":"pgadmin","administratorLoginPassword":"P@ssw0rd!","version":"16"}}'
+
+echo "-- GET PostgreSQL Flexible Server --"
+az rest --method get --url "${PG_URL}?api-version=${API_PG}"
+
+echo "-- PUT PostgreSQL database --"
+az rest --method put \
+  --url "${PG_URL}/databases/smoke-pgdb?api-version=${API_PG}" \
+  --body '{"properties":{"charset":"UTF8","collation":"en_US.utf8"}}'
+
+echo "-- PUT PostgreSQL firewall rule --"
+az rest --method put \
+  --url "${PG_URL}/firewallRules/AllowAll?api-version=${API_PG}" \
+  --body '{"properties":{"startIpAddress":"0.0.0.0","endIpAddress":"255.255.255.255"}}'
+
+echo "-- LIST PostgreSQL databases --"
+az rest --method get --url "${PG_URL}/databases?api-version=${API_PG}"
+
+echo "-- GET PostgreSQL configurations (stub) --"
+az rest --method get --url "${PG_URL}/configurations?api-version=${API_PG}"
+
+echo "-- DELETE PostgreSQL server --"
+az rest --method delete --url "${PG_URL}?api-version=${API_PG}"
+
+# ---- Fase 30: MySQL Flexible Server ----
+API_MY="2021-05-01"
+MY_SRV="smoke-mysql"
+MY_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DBforMySQL/flexibleServers/${MY_SRV}"
+
+echo "-- PUT MySQL Flexible Server --"
+az rest --method put \
+  --url "${MY_URL}?api-version=${API_MY}" \
+  --body '{"location":"eastus","sku":{"name":"Standard_B1ms","tier":"Burstable"},"properties":{"administratorLogin":"mysqladmin","administratorLoginPassword":"P@ssw0rd!","version":"8.0.21"}}'
+
+echo "-- GET MySQL Flexible Server --"
+az rest --method get --url "${MY_URL}?api-version=${API_MY}"
+
+echo "-- PUT MySQL database --"
+az rest --method put \
+  --url "${MY_URL}/databases/smoke-mydb?api-version=${API_MY}" \
+  --body '{"properties":{"charset":"utf8mb4","collation":"utf8mb4_unicode_ci"}}'
+
+echo "-- DELETE MySQL server --"
+az rest --method delete --url "${MY_URL}?api-version=${API_MY}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

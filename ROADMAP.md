@@ -141,6 +141,17 @@ plus `POST .../listSecrets` returning a deterministic fake `apiKey`;
 `defaultHostname` is `{name}.azurestaticapps.net`; `sku` defaults to Free.
 Four unit tests (CRUD, listSecrets, defaults, apiKey stability) all pass;
 live smoke test confirms 201/200/204/404 on the expected paths.
+Phase 30 (PostgreSQL + MySQL Flexible Server) is done: two new packages
+`internal/services/postgresql` and `internal/services/mysql` implement
+`Microsoft.DBforPostgreSQL/flexibleServers` and `Microsoft.DBforMySQL/
+flexibleServers` (ARM CRUD, sync) — flexible server with `sku`/`storage`/
+`backup`/`highAvailability`, plus `databases` and `firewallRules`
+sub-resources (full ARM CRUD) and a `configurations` stub that returns
+an empty list / system-default value so provider reads don't fail. FQDN
+is `{name}.postgres.database.azure.com` / `{name}.mysql.database.azure.com`;
+MySQL adds `replicaCapacity=5`/`replicationRole=None` so azurerm reads
+zero drift. Six unit tests (3 PostgreSQL, 3 MySQL) all pass; live smoke
+confirms 201/200/204 on all paths.
 Phase 31 (Recovery Services Vault) is done: `internal/services/recoveryservices`
 implements `Microsoft.RecoveryServices/vaults` (ARM CRUD, sync) with `sku`
 (Standard/RS0), `publicNetworkAccess`; read-only sub-resources

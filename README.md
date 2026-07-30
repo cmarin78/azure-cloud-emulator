@@ -23,7 +23,8 @@ webhook delivery), Phase 21 (Logic App Recurrence trigger, with a real
 firing goroutine), Phase 23 (Azure SQL Database), Phase 24 (Azure
 Container Registry), Phase 25 (Redis Cache), Phase 26 (Azure Container
 Instances), Phase 27 (Azure Policy), Phase 28 (Storage File Shares),
-Phase 29 (Static Web Apps), and Phase 31 (Recovery Services Vault). See
+Phase 29 (Static Web Apps), Phase 30 (PostgreSQL + MySQL Flexible
+Server), and Phase 31 (Recovery Services Vault). See
 [ROADMAP.md](ROADMAP.md)
 for what's planned next (the rest of the behavioral/real-delivery layer
 inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
@@ -58,6 +59,7 @@ inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
 | 27 | Azure Policy | `Microsoft.Authorization/policyDefinitions` + `/policyAssignments` (ARM CRUD, both subscription and resource-group scope) — `policyRule`/`parameters` stored as raw JSON; built-in lookup returns 404; no real policy evaluation |
 | 28 | Storage File Shares | `Microsoft.Storage/storageAccounts/fileServices` (GET list/singleton, PUT singleton) + `/fileServices/default/shares` (ARM CRUD) — `shareQuota`, `enabledProtocols` (SMB/NFS, default SMB), `accessTier` (default TransactionOptimized), `metadata`; verified with `azurerm_storage_share` |
 | 29 | Static Web Apps | `Microsoft.Web/staticSites` (ARM CRUD, sync) + `POST .../listSecrets` (returns deterministic fake `apiKey`) — deterministic `defaultHostname` as `{name}.azurestaticapps.net`; `sku.name/tier` (default Free); no real deployment pipeline |
+| 30 | PostgreSQL + MySQL Flexible Server | `Microsoft.DBforPostgreSQL/flexibleServers` + `Microsoft.DBforMySQL/flexibleServers` (both ARM CRUD, sync) — `sku` (name, tier derived from prefix), `storage`, `backup`, `highAvailability`; sub-resources: `databases` (ARM CRUD) and `firewallRules` (ARM CRUD); `configurations` list/get stub (always empty/default); deterministic FQDN (`{name}.postgres.database.azure.com` / `{name}.mysql.database.azure.com`); MySQL includes `replicaCapacity`/`replicationRole`; no real database engine |
 | 31 | Recovery Services Vault | `Microsoft.RecoveryServices/vaults` (ARM CRUD, sync) — `sku` (Standard/RS0), `publicNetworkAccess` (default Enabled); read-only sub-resources: `backupConfig/vaultconfig` (softDelete=Enabled, GeoRedundant), `backupPolicies` (always empty list), `backupStorageConfig/vaultStorageConfig`; PUT on backupConfig accepted (no-op); no real backup scheduling |
 
 ### Feature matrix (detail)

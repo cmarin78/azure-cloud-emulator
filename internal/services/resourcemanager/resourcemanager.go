@@ -195,6 +195,16 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.RecoveryServices", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "vaults", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-04-01", "2022-10-01"}},
 	}},
+	{Namespace: "Microsoft.DBforPostgreSQL", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "flexibleServers", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-06-01-preview", "2022-12-01"}},
+		{ResourceType: "flexibleServers/databases", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-01-preview", "2022-12-01"}},
+		{ResourceType: "flexibleServers/firewallRules", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-01-preview", "2022-12-01"}},
+	}},
+	{Namespace: "Microsoft.DBforMySQL", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "flexibleServers", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
+		{ResourceType: "flexibleServers/databases", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
+		{ResourceType: "flexibleServers/firewallRules", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

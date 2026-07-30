@@ -1405,6 +1405,58 @@ az rest --method delete --url "$VaultUrl`?api-version=$ApiRsv"
 
 Remove-Item -Force $VaultBody -ErrorAction SilentlyContinue
 
+# ---- Fase 30: PostgreSQL Flexible Server ----
+$ApiPg     = "2022-12-01"
+$PgSrv     = "smoke-pg"
+$PgSrvUrl  = "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/$PgSrv"
+
+$PgBody = New-TemporaryFile; Set-Content $PgBody '{"location":"eastus","sku":{"name":"B_Standard_B1ms"},"properties":{"administratorLogin":"pgadmin","administratorLoginPassword":"P@ssw0rd!","version":"16"}}'
+Write-Host "-- PUT PostgreSQL Flexible Server --"
+az rest --method put --url "$PgSrvUrl`?api-version=$ApiPg" --body "@$PgBody"
+
+Write-Host "-- GET PostgreSQL Flexible Server --"
+az rest --method get --url "$PgSrvUrl`?api-version=$ApiPg"
+
+$PgDbBody = New-TemporaryFile; Set-Content $PgDbBody '{"properties":{"charset":"UTF8","collation":"en_US.utf8"}}'
+Write-Host "-- PUT PostgreSQL database --"
+az rest --method put --url "$PgSrvUrl/databases/smoke-pgdb`?api-version=$ApiPg" --body "@$PgDbBody"
+
+$PgFwBody = New-TemporaryFile; Set-Content $PgFwBody '{"properties":{"startIpAddress":"0.0.0.0","endIpAddress":"255.255.255.255"}}'
+Write-Host "-- PUT PostgreSQL firewall rule --"
+az rest --method put --url "$PgSrvUrl/firewallRules/AllowAll`?api-version=$ApiPg" --body "@$PgFwBody"
+
+Write-Host "-- LIST PostgreSQL databases --"
+az rest --method get --url "$PgSrvUrl/databases`?api-version=$ApiPg"
+
+Write-Host "-- GET PostgreSQL configurations (stub) --"
+az rest --method get --url "$PgSrvUrl/configurations`?api-version=$ApiPg"
+
+Write-Host "-- DELETE PostgreSQL server --"
+az rest --method delete --url "$PgSrvUrl`?api-version=$ApiPg"
+
+Remove-Item -Force $PgBody, $PgDbBody, $PgFwBody -ErrorAction SilentlyContinue
+
+# ---- Fase 30: MySQL Flexible Server ----
+$ApiMy     = "2021-05-01"
+$MySrv     = "smoke-mysql"
+$MySrvUrl  = "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.DBforMySQL/flexibleServers/$MySrv"
+
+$MyBody = New-TemporaryFile; Set-Content $MyBody '{"location":"eastus","sku":{"name":"Standard_B1ms","tier":"Burstable"},"properties":{"administratorLogin":"mysqladmin","administratorLoginPassword":"P@ssw0rd!","version":"8.0.21"}}'
+Write-Host "-- PUT MySQL Flexible Server --"
+az rest --method put --url "$MySrvUrl`?api-version=$ApiMy" --body "@$MyBody"
+
+Write-Host "-- GET MySQL Flexible Server --"
+az rest --method get --url "$MySrvUrl`?api-version=$ApiMy"
+
+$MyDbBody = New-TemporaryFile; Set-Content $MyDbBody '{"properties":{"charset":"utf8mb4","collation":"utf8mb4_unicode_ci"}}'
+Write-Host "-- PUT MySQL database --"
+az rest --method put --url "$MySrvUrl/databases/smoke-mydb`?api-version=$ApiMy" --body "@$MyDbBody"
+
+Write-Host "-- DELETE MySQL server --"
+az rest --method delete --url "$MySrvUrl`?api-version=$ApiMy"
+
+Remove-Item -Force $MyBody, $MyDbBody -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 
