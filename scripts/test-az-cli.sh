@@ -1552,6 +1552,44 @@ az rest --method put \
 echo "-- DELETE MySQL server --"
 az rest --method delete --url "${MY_URL}?api-version=${API_MY}"
 
+# ---- Fase 33: Private Endpoints + Private Link Services ----
+API_PE="2023-09-01"
+PE_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/privateEndpoints/smoke-pe"
+PLS_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/privateLinkServices/smoke-pls"
+
+echo "-- PUT Private Endpoint --"
+az rest --method put \
+  --url "${PE_URL}?api-version=${API_PE}" \
+  --body '{"location":"eastus","properties":{"subnet":{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/emulator-test-rg/providers/Microsoft.Network/virtualNetworks/vnet1/subnets/default"},"privateLinkServiceConnections":[{"name":"conn1","properties":{"privateLinkServiceId":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/emulator-test-rg/providers/Microsoft.Storage/storageAccounts/mysa","groupIds":["blob"]}}]}}'
+
+echo "-- GET Private Endpoint --"
+az rest --method get --url "${PE_URL}?api-version=${API_PE}"
+
+echo "-- PUT privateDnsZoneGroup --"
+az rest --method put \
+  --url "${PE_URL}/privateDnsZoneGroups/mygroup?api-version=${API_PE}" \
+  --body '{"properties":{"privateDnsZoneConfigs":[{"name":"config1","properties":{"privateDnsZoneId":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/emulator-test-rg/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"}}]}}'
+
+echo "-- GET privateDnsZoneGroup --"
+az rest --method get --url "${PE_URL}/privateDnsZoneGroups/mygroup?api-version=${API_PE}"
+
+echo "-- DELETE privateDnsZoneGroup --"
+az rest --method delete --url "${PE_URL}/privateDnsZoneGroups/mygroup?api-version=${API_PE}"
+
+echo "-- DELETE Private Endpoint --"
+az rest --method delete --url "${PE_URL}?api-version=${API_PE}"
+
+echo "-- PUT Private Link Service --"
+az rest --method put \
+  --url "${PLS_URL}?api-version=${API_PE}" \
+  --body '{"location":"eastus","properties":{"ipConfigurations":[{"name":"ipconfig1","properties":{"privateIpAllocationMethod":"Dynamic","subnet":{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/emulator-test-rg/providers/Microsoft.Network/virtualNetworks/vnet1/subnets/default"},"primary":true}}]}}'
+
+echo "-- GET Private Link Service --"
+az rest --method get --url "${PLS_URL}?api-version=${API_PE}"
+
+echo "-- DELETE Private Link Service --"
+az rest --method delete --url "${PLS_URL}?api-version=${API_PE}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

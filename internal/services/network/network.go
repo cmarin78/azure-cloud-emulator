@@ -64,6 +64,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	s.registerLoadBalancers(mux)
 	s.registerRouteTables(mux)
 	s.registerPrivateDNS(mux)
+	s.registerPrivateEndpoints(mux)
+	s.registerPrivateLinkServices(mux)
 }
 
 // AddressSpace replica "properties.addressSpace" de una VNet.

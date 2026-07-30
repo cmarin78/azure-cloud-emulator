@@ -170,6 +170,17 @@ GeoRedundant), `backupPolicies` (always empty list), and
 as a no-op so azurerm can write without errors. Three unit tests (CRUD,
 defaults, sub-resources) all pass; live az CLI smoke confirms 201/200/204
 on the expected paths.
+Phase 33 (Private Endpoints + Private Link Services) is done: two new files
+added to `internal/services/network` — `privateendpoints.go` implements
+`Microsoft.Network/privateEndpoints` (ARM CRUD, sync; `privateLinkServiceConnections`
+auto-set to Approved state; deterministic NIC ID injected into
+`networkInterfaces[]`) plus `privateDnsZoneGroups` as a full sub-resource (PUT/GET/
+LIST/DELETE); also `Microsoft.Network/privateLinkServices` (ARM CRUD, sync;
+deterministic `alias`; `privateEndpointConnections` list/get/delete stubs). Both
+registered in `Register()` alongside the existing network resources. Three unit
+tests (`TestPrivateEndpointCRUD`, `TestPrivateDNSZoneGroupCRUD`,
+`TestPrivateLinkServiceCRUD`) all pass; az CLI smoke confirms 201/200/204 on all
+paths; Terraform block (`azurerm_private_endpoint`) added to azurerm-smoke-test.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape

@@ -24,8 +24,9 @@ firing goroutine), Phase 23 (Azure SQL Database), Phase 24 (Azure
 Container Registry), Phase 25 (Redis Cache), Phase 26 (Azure Container
 Instances), Phase 27 (Azure Policy), Phase 28 (Storage File Shares),
 Phase 29 (Static Web Apps), Phase 30 (PostgreSQL + MySQL Flexible
-Server), Phase 31 (Recovery Services Vault), and Phase 32 (Notification
-Hubs + SignalR Service). See
+Server), Phase 31 (Recovery Services Vault), Phase 32 (Notification
+Hubs + SignalR Service), and Phase 33 (Private Endpoints + Private Link
+Services). See
 [ROADMAP.md](ROADMAP.md)
 for what's planned next (the rest of the behavioral/real-delivery layer
 inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
@@ -63,6 +64,7 @@ inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
 | 32 | Notification Hubs + SignalR Service | `Microsoft.NotificationHubs/namespaces` (ARM CRUD, sync) + `/notificationHubs` (ARM CRUD, sync) + `listKeys` (deterministic primary/secondary connection strings); `Microsoft.SignalRService/signalR` (ARM CRUD, sync) + `listKeys`; deterministic `hostName` (`{name}.service.signalr.net`), `publicPort`/`serverPort`=443, `serviceMode`=Default; `sku.tier` derived from SKU name |
 | 30 | PostgreSQL + MySQL Flexible Server | `Microsoft.DBforPostgreSQL/flexibleServers` + `Microsoft.DBforMySQL/flexibleServers` (both ARM CRUD, sync) — `sku` (name, tier derived from prefix), `storage`, `backup`, `highAvailability`; sub-resources: `databases` (ARM CRUD) and `firewallRules` (ARM CRUD); `configurations` list/get stub (always empty/default); deterministic FQDN (`{name}.postgres.database.azure.com` / `{name}.mysql.database.azure.com`); MySQL includes `replicaCapacity`/`replicationRole`; no real database engine |
 | 31 | Recovery Services Vault | `Microsoft.RecoveryServices/vaults` (ARM CRUD, sync) — `sku` (Standard/RS0), `publicNetworkAccess` (default Enabled); read-only sub-resources: `backupConfig/vaultconfig` (softDelete=Enabled, GeoRedundant), `backupPolicies` (always empty list), `backupStorageConfig/vaultStorageConfig`; PUT on backupConfig accepted (no-op); no real backup scheduling |
+| 33 | Private Endpoints + Private Link | `Microsoft.Network/privateEndpoints` (ARM CRUD, sync) — `privateLinkServiceConnections[]` (auto-approved, state=Approved), `subnet.id`, `networkInterfaces[]` (deterministic NIC ID injected); `privateDnsZoneGroups` (full CRUD sub-resource); `Microsoft.Network/privateLinkServices` (ARM CRUD, sync) — `ipConfigurations`, `loadBalancerFrontendIpConfigurations`, `visibility`, `autoApproval`, `alias` (deterministic); `privateEndpointConnections` list/get/delete stubs; no real network plumbing |
 
 ### Feature matrix (detail)
 

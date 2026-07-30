@@ -329,6 +329,38 @@ resource "azurerm_redis_cache" "test" {
   minimum_tls_version = "1.2"
 }
 
+# Fase 33 (Private Endpoints + Private Link Services).
+# azurerm_private_endpoint necesita un subnet ID y un private_service_connection
+# con el ID del recurso destino. Aquí apuntamos al storage account de File Shares
+# (azurerm_storage_account.fileshare_test) ya declarado arriba.
+resource "azurerm_virtual_network" "pe_vnet" {
+  name                = "azurermsmokepe-vnet"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = var.location
+  address_space       = ["10.10.0.0/16"]
+}
+
+resource "azurerm_subnet" "pe_subnet" {
+  name                 = "pe-subnet"
+  resource_group_name  = azurerm_resource_group.test.name
+  virtual_network_name = azurerm_virtual_network.pe_vnet.name
+  address_prefixes     = ["10.10.1.0/24"]
+}
+
+resource "azurerm_private_endpoint" "test" {
+  name                = "azurermsmokependpoint"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = var.location
+  subnet_id           = azurerm_subnet.pe_subnet.id
+
+  private_service_connection {
+    name                           = "conn1"
+    private_connection_resource_id = azurerm_storage_account.fileshare_test.id
+    subresource_names              = ["blob"]
+    is_manual_connection           = false
+  }
+}
+
 output "subscription_id" {
   value = data.azurerm_subscription.current.subscription_id
 }
