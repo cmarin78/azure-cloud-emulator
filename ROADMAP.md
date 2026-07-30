@@ -141,6 +141,15 @@ plus `POST .../listSecrets` returning a deterministic fake `apiKey`;
 `defaultHostname` is `{name}.azurestaticapps.net`; `sku` defaults to Free.
 Four unit tests (CRUD, listSecrets, defaults, apiKey stability) all pass;
 live smoke test confirms 201/200/204/404 on the expected paths.
+Phase 32 (Notification Hubs + SignalR Service) is done: two new packages
+`internal/services/notificationhubs` (Microsoft.NotificationHubs/namespaces
++ notificationHubs ARM CRUD sync; authorization rules ARM CRUD sync;
+`listKeys` with deterministic connection strings using `sb://{ns}.servicebus.
+windows.net/`) and `internal/services/signalr` (Microsoft.SignalRService/
+signalR ARM CRUD sync; `listKeys` with `Endpoint=https://{name}.service.
+signalr.net/...`; `serviceMode` extracted from `features[]` or
+`properties.serviceMode`; `sku.tier` derived from SKU name). Six unit tests
+all pass; live az CLI smoke confirms 201/200/204 on all paths.
 Phase 30 (PostgreSQL + MySQL Flexible Server) is done: two new packages
 `internal/services/postgresql` and `internal/services/mysql` implement
 `Microsoft.DBforPostgreSQL/flexibleServers` and `Microsoft.DBforMySQL/

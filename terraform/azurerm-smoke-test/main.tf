@@ -234,6 +234,34 @@ resource "azurerm_storage_share" "test" {
   quota                = 50
 }
 
+# Fase 32 (Notification Hubs).
+resource "azurerm_notification_hub_namespace" "test" {
+  name                = "azurermsmokenh"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = var.location
+  namespace_type      = "NotificationHub"
+  sku_name            = "Free"
+}
+
+resource "azurerm_notification_hub" "test" {
+  name                    = "azurermsmokehub"
+  namespace_name          = azurerm_notification_hub_namespace.test.name
+  resource_group_name     = azurerm_resource_group.test.name
+  location                = var.location
+}
+
+# Fase 32 (SignalR Service).
+resource "azurerm_signalr_service" "test" {
+  name                = "azurermsmokesr"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = var.location
+
+  sku {
+    name     = "Free_F1"
+    capacity = 1
+  }
+}
+
 # Fase 30 (PostgreSQL Flexible Server).
 resource "azurerm_postgresql_flexible_server" "test" {
   name                   = "azurermsmokepostgres"
@@ -347,6 +375,14 @@ output "static_site_default_host_name" {
 
 output "file_share_id" {
   value = azurerm_storage_share.test.id
+}
+
+output "notification_hub_id" {
+  value = azurerm_notification_hub.test.id
+}
+
+output "signalr_hostname" {
+  value = azurerm_signalr_service.test.hostname
 }
 
 output "postgresql_fqdn" {

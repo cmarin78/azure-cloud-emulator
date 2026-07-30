@@ -1459,6 +1459,46 @@ az rest --method get --url "${VAULT_URL}/backupStorageConfig/vaultStorageConfig?
 echo "-- DELETE Vault --"
 az rest --method delete --url "${VAULT_URL}?api-version=${API_RSV}"
 
+# ---- Fase 32: Notification Hubs ----
+API_NH="2017-04-01"
+NH_NS_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.NotificationHubs/namespaces/smoke-nhns"
+
+echo "-- PUT NotificationHubs namespace --"
+az rest --method put --url "${NH_NS_URL}?api-version=${API_NH}" \
+  --body '{"location":"eastus","sku":{"name":"Free"}}'
+
+echo "-- PUT NotificationHub --"
+az rest --method put --url "${NH_NS_URL}/notificationHubs/smoke-hub?api-version=${API_NH}" \
+  --body '{"location":"eastus"}'
+
+echo "-- GET NotificationHub --"
+az rest --method get --url "${NH_NS_URL}/notificationHubs/smoke-hub?api-version=${API_NH}"
+
+echo "-- POST listKeys NotificationHub --"
+az rest --method post --url "${NH_NS_URL}/notificationHubs/smoke-hub/authorizationRules/DefaultFullSharedAccessSignature/listKeys?api-version=${API_NH}" \
+  --body '{}'
+
+echo "-- DELETE NotificationHub namespace --"
+az rest --method delete --url "${NH_NS_URL}?api-version=${API_NH}"
+
+# ---- Fase 32: SignalR Service ----
+API_SR="2023-02-01"
+SR_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.SignalRService/signalR/smoke-signalr"
+
+echo "-- PUT SignalR Service --"
+az rest --method put --url "${SR_URL}?api-version=${API_SR}" \
+  --body '{"location":"eastus","sku":{"name":"Free_F1","capacity":1}}'
+
+echo "-- GET SignalR Service --"
+az rest --method get --url "${SR_URL}?api-version=${API_SR}"
+
+echo "-- POST listKeys SignalR --"
+az rest --method post --url "${SR_URL}/listKeys?api-version=${API_SR}" \
+  --body '{}'
+
+echo "-- DELETE SignalR Service --"
+az rest --method delete --url "${SR_URL}?api-version=${API_SR}"
+
 # ---- Fase 30: PostgreSQL Flexible Server ----
 API_PG="2022-12-01"
 PG_SRV="smoke-pg"

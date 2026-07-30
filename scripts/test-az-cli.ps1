@@ -1405,6 +1405,50 @@ az rest --method delete --url "$VaultUrl`?api-version=$ApiRsv"
 
 Remove-Item -Force $VaultBody -ErrorAction SilentlyContinue
 
+# ---- Fase 32: Notification Hubs ----
+$ApiNH     = "2017-04-01"
+$NhNsUrl   = "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.NotificationHubs/namespaces/smoke-nhns"
+
+$NhNsBody  = New-TemporaryFile; Set-Content $NhNsBody '{"location":"eastus","sku":{"name":"Free"}}'
+Write-Host "-- PUT NotificationHubs namespace --"
+az rest --method put --url "$NhNsUrl`?api-version=$ApiNH" --body "@$NhNsBody"
+
+$HubBody   = New-TemporaryFile; Set-Content $HubBody '{"location":"eastus"}'
+Write-Host "-- PUT NotificationHub --"
+az rest --method put --url "$NhNsUrl/notificationHubs/smoke-hub`?api-version=$ApiNH" --body "@$HubBody"
+
+Write-Host "-- GET NotificationHub --"
+az rest --method get --url "$NhNsUrl/notificationHubs/smoke-hub`?api-version=$ApiNH"
+
+$EmptyBody = New-TemporaryFile; Set-Content $EmptyBody '{}'
+Write-Host "-- POST listKeys NotificationHub --"
+az rest --method post --url "$NhNsUrl/notificationHubs/smoke-hub/authorizationRules/DefaultFullSharedAccessSignature/listKeys`?api-version=$ApiNH" --body "@$EmptyBody"
+
+Write-Host "-- DELETE NotificationHub namespace --"
+az rest --method delete --url "$NhNsUrl`?api-version=$ApiNH"
+
+Remove-Item -Force $NhNsBody, $HubBody, $EmptyBody -ErrorAction SilentlyContinue
+
+# ---- Fase 32: SignalR Service ----
+$ApiSR     = "2023-02-01"
+$SrUrl     = "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.SignalRService/signalR/smoke-signalr"
+
+$SrBody    = New-TemporaryFile; Set-Content $SrBody '{"location":"eastus","sku":{"name":"Free_F1","capacity":1}}'
+Write-Host "-- PUT SignalR Service --"
+az rest --method put --url "$SrUrl`?api-version=$ApiSR" --body "@$SrBody"
+
+Write-Host "-- GET SignalR Service --"
+az rest --method get --url "$SrUrl`?api-version=$ApiSR"
+
+$EmptyBody2 = New-TemporaryFile; Set-Content $EmptyBody2 '{}'
+Write-Host "-- POST listKeys SignalR --"
+az rest --method post --url "$SrUrl/listKeys`?api-version=$ApiSR" --body "@$EmptyBody2"
+
+Write-Host "-- DELETE SignalR Service --"
+az rest --method delete --url "$SrUrl`?api-version=$ApiSR"
+
+Remove-Item -Force $SrBody, $EmptyBody2 -ErrorAction SilentlyContinue
+
 # ---- Fase 30: PostgreSQL Flexible Server ----
 $ApiPg     = "2022-12-01"
 $PgSrv     = "smoke-pg"

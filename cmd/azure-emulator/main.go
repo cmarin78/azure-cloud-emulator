@@ -32,7 +32,9 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/managedidentity"
 	"github.com/cesarmarin/azure-emulator/internal/services/monitor"
 	"github.com/cesarmarin/azure-emulator/internal/services/mysql"
+	"github.com/cesarmarin/azure-emulator/internal/services/notificationhubs"
 	"github.com/cesarmarin/azure-emulator/internal/services/postgresql"
+	"github.com/cesarmarin/azure-emulator/internal/services/signalr"
 	"github.com/cesarmarin/azure-emulator/internal/services/network"
 	"github.com/cesarmarin/azure-emulator/internal/services/queue"
 	"github.com/cesarmarin/azure-emulator/internal/services/recoveryservices"
@@ -120,6 +122,8 @@ func main() {
 	recoveryservices.New(db).Register(srv.Mux())
 	postgresql.New(db).Register(srv.Mux())
 	mysql.New(db).Register(srv.Mux())
+	notificationhubs.New(db).Register(srv.Mux())
+	signalr.New(db).Register(srv.Mux())
 	// logicapps dispara de verdad cualquier workflow Enabled con un trigger
 	// Recurrence válido (Fase 21) -- igual que Cloud Scheduler en
 	// gcp-emulator, su New() relanza los goroutines de disparo de cualquier

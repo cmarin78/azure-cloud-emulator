@@ -200,6 +200,13 @@ var registeredNamespaces = []Provider{
 		{ResourceType: "flexibleServers/databases", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-01-preview", "2022-12-01"}},
 		{ResourceType: "flexibleServers/firewallRules", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-01-preview", "2022-12-01"}},
 	}},
+	{Namespace: "Microsoft.NotificationHubs", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2017-04-01", "2016-03-01"}},
+		{ResourceType: "namespaces/notificationHubs", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2017-04-01", "2016-03-01"}},
+	}},
+	{Namespace: "Microsoft.SignalRService", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "signalR", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-02-01", "2022-02-01"}},
+	}},
 	{Namespace: "Microsoft.DBforMySQL", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "flexibleServers", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
 		{ResourceType: "flexibleServers/databases", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
