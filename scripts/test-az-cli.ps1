@@ -1373,6 +1373,38 @@ az rest --method delete `
 
 Remove-Item -Force $FsAcctBody, $ShareBody -ErrorAction SilentlyContinue
 
+# ---- Fase 31: Recovery Services Vault ----
+$ApiRsv   = "2023-04-01"
+$VaultName = "smoke-rsv"
+$VaultUrl  = "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.RecoveryServices/vaults/$VaultName"
+
+$VaultBody = [System.IO.Path]::GetTempFileName()
+@'
+{"location":"eastus","sku":{"name":"Standard"}}
+'@ | Set-Content $VaultBody
+
+Write-Host "-- PUT Recovery Services Vault --"
+az rest --method put `
+  --url "$VaultUrl`?api-version=$ApiRsv" `
+  --body "@$VaultBody"
+
+Write-Host "-- GET Vault --"
+az rest --method get --url "$VaultUrl`?api-version=$ApiRsv"
+
+Write-Host "-- GET backupConfig/vaultconfig --"
+az rest --method get --url "$VaultUrl/backupConfig/vaultconfig`?api-version=$ApiRsv"
+
+Write-Host "-- GET backupPolicies --"
+az rest --method get --url "$VaultUrl/backupPolicies`?api-version=$ApiRsv"
+
+Write-Host "-- GET backupStorageConfig/vaultStorageConfig --"
+az rest --method get --url "$VaultUrl/backupStorageConfig/vaultStorageConfig`?api-version=$ApiRsv"
+
+Write-Host "-- DELETE Vault --"
+az rest --method delete --url "$VaultUrl`?api-version=$ApiRsv"
+
+Remove-Item -Force $VaultBody -ErrorAction SilentlyContinue
+
 Write-Host "-- DELETE resource group (async, 202) --"
 az rest --method delete --url "$Endpoint/subscriptions/$Sub/resourceGroups/$Rg`?api-version=$ApiRg"
 

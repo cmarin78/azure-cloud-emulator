@@ -234,6 +234,14 @@ resource "azurerm_storage_share" "test" {
   quota                = 50
 }
 
+# Fase 31 (Recovery Services Vault).
+resource "azurerm_recovery_services_vault" "test" {
+  name                = "azurermsmokersvault"
+  resource_group_name = azurerm_resource_group.test.name
+  location            = var.location
+  sku                 = "Standard"
+}
+
 # Fase 25 (Redis Cache).
 resource "azurerm_redis_cache" "test" {
   name                = "azurermsmokereddis"
@@ -292,6 +300,10 @@ output "static_site_default_host_name" {
 
 output "file_share_id" {
   value = azurerm_storage_share.test.id
+}
+
+output "recovery_vault_id" {
+  value = azurerm_recovery_services_vault.test.id
 }
 
 output "redis_hostname" {

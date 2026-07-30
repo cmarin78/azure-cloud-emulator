@@ -1434,6 +1434,31 @@ echo "-- DELETE File Share --"
 az rest --method delete \
   --url "${SHARE_URL}?api-version=${API_FILESHARE}"
 
+# ---- Fase 31: Recovery Services Vault ----
+API_RSV="2023-04-01"
+VAULT_NAME="smoke-rsv"
+VAULT_URL="${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.RecoveryServices/vaults/${VAULT_NAME}"
+
+echo "-- PUT Recovery Services Vault --"
+az rest --method put \
+  --url "${VAULT_URL}?api-version=${API_RSV}" \
+  --body '{"location":"eastus","sku":{"name":"Standard"}}'
+
+echo "-- GET Vault --"
+az rest --method get --url "${VAULT_URL}?api-version=${API_RSV}"
+
+echo "-- GET backupConfig/vaultconfig --"
+az rest --method get --url "${VAULT_URL}/backupConfig/vaultconfig?api-version=${API_RSV}"
+
+echo "-- GET backupPolicies --"
+az rest --method get --url "${VAULT_URL}/backupPolicies?api-version=${API_RSV}"
+
+echo "-- GET backupStorageConfig/vaultStorageConfig --"
+az rest --method get --url "${VAULT_URL}/backupStorageConfig/vaultStorageConfig?api-version=${API_RSV}"
+
+echo "-- DELETE Vault --"
+az rest --method delete --url "${VAULT_URL}?api-version=${API_RSV}"
+
 echo "-- DELETE resource group (async, 202) --"
 az rest --method delete \
   --url "${ENDPOINT}/subscriptions/${SUB}/resourceGroups/${RG}?api-version=${API_RG}"

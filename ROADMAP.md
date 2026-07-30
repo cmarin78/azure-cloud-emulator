@@ -141,6 +141,15 @@ plus `POST .../listSecrets` returning a deterministic fake `apiKey`;
 `defaultHostname` is `{name}.azurestaticapps.net`; `sku` defaults to Free.
 Four unit tests (CRUD, listSecrets, defaults, apiKey stability) all pass;
 live smoke test confirms 201/200/204/404 on the expected paths.
+Phase 31 (Recovery Services Vault) is done: `internal/services/recoveryservices`
+implements `Microsoft.RecoveryServices/vaults` (ARM CRUD, sync) with `sku`
+(Standard/RS0), `publicNetworkAccess`; read-only sub-resources
+`backupConfig/vaultconfig` (softDeleteFeatureState=Enabled, storageType=
+GeoRedundant), `backupPolicies` (always empty list), and
+`backupStorageConfig/vaultStorageConfig`; PUT on backupConfig is accepted
+as a no-op so azurerm can write without errors. Three unit tests (CRUD,
+defaults, sub-resources) all pass; live az CLI smoke confirms 201/200/204
+on the expected paths.
 
 Note on architecture: path-style data-plane services (blob, queue,
 and table) all share the URL shape
