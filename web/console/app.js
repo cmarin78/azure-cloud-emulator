@@ -818,5 +818,878 @@ async function listFunctionKeys() {
   alert(JSON.stringify(data, null, 2));
 }
 
+// ---- Phase 15: Event Hubs (Microsoft.EventHub, api-version 2021-11-01) ----
+const API_EH = "2021-11-01";
+
+function ehBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.EventHub/namespaces`;
+}
+
+async function loadEHNamespaces() {
+  const data = await api("GET", `${ehBase()}?api-version=${API_EH}`);
+  const rows = (data.value || [])
+    .map(
+      (ns) => `<tr>
+        <td>${ns.name}</td>
+        <td>${ns.location}</td>
+        <td>${ns.sku?.name ?? ""}</td>
+        <td>${ns.properties?.provisioningState ?? ""}</td>
+        <td>${ns.properties?.serviceBusEndpoint ?? ""}</td>
+        <td><button class="link" onclick="deleteEHNamespace('${ns.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("ehTable").innerHTML = rows;
+}
+
+async function createEHNamespace() {
+  const name = document.getElementById("newEhName").value.trim();
+  const location = document.getElementById("newEhLocation").value.trim();
+  const skuName = document.getElementById("newEhSku").value;
+  if (!name || !location) return;
+  await api("PUT", `${ehBase()}/${name}?api-version=${API_EH}`, {
+    location,
+    sku: { name: skuName, tier: skuName },
+  });
+  document.getElementById("newEhName").value = "";
+  loadEHNamespaces();
+}
+
+async function deleteEHNamespace(name) {
+  await api("DELETE", `${ehBase()}/${name}?api-version=${API_EH}`);
+  loadEHNamespaces();
+}
+
+// ---- Phase 16: Event Grid (Microsoft.EventGrid, api-version 2022-06-15) ----
+const API_EG = "2022-06-15";
+
+function egBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.EventGrid/topics`;
+}
+
+async function loadEGTopics() {
+  const data = await api("GET", `${egBase()}?api-version=${API_EG}`);
+  const rows = (data.value || [])
+    .map(
+      (t) => `<tr>
+        <td>${t.name}</td>
+        <td>${t.location}</td>
+        <td>${t.properties?.provisioningState ?? ""}</td>
+        <td>${t.properties?.endpoint ?? ""}</td>
+        <td><button class="link" onclick="deleteEGTopic('${t.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("egTable").innerHTML = rows;
+}
+
+async function createEGTopic() {
+  const name = document.getElementById("newEgName").value.trim();
+  const location = document.getElementById("newEgLocation").value.trim();
+  if (!name || !location) return;
+  await api("PUT", `${egBase()}/${name}?api-version=${API_EG}`, { location });
+  document.getElementById("newEgName").value = "";
+  loadEGTopics();
+}
+
+async function deleteEGTopic(name) {
+  await api("DELETE", `${egBase()}/${name}?api-version=${API_EG}`);
+  loadEGTopics();
+}
+
+// ---- Phase 17: Managed Identity (Microsoft.ManagedIdentity, api-version 2023-01-31) ----
+const API_MI = "2023-01-31";
+
+function miBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.ManagedIdentity/userAssignedIdentities`;
+}
+
+async function loadManagedIdentities() {
+  const data = await api("GET", `${miBase()}?api-version=${API_MI}`);
+  const rows = (data.value || [])
+    .map(
+      (id) => `<tr>
+        <td>${id.name}</td>
+        <td>${id.location}</td>
+        <td>${id.properties?.clientId ?? ""}</td>
+        <td>${id.properties?.principalId ?? ""}</td>
+        <td><button class="link" onclick="deleteManagedIdentity('${id.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("miTable").innerHTML = rows;
+}
+
+async function createManagedIdentity() {
+  const name = document.getElementById("newMiName").value.trim();
+  const location = document.getElementById("newMiLocation").value.trim();
+  if (!name || !location) return;
+  await api("PUT", `${miBase()}/${name}?api-version=${API_MI}`, { location });
+  document.getElementById("newMiName").value = "";
+  loadManagedIdentities();
+}
+
+async function deleteManagedIdentity(name) {
+  await api("DELETE", `${miBase()}/${name}?api-version=${API_MI}`);
+  loadManagedIdentities();
+}
+
+// ---- Phase 18: API Management (Microsoft.ApiManagement, api-version 2022-08-01) ----
+const API_APIM = "2022-08-01";
+
+function apimBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.ApiManagement/service`;
+}
+
+async function loadAPIM() {
+  const data = await api("GET", `${apimBase()}?api-version=${API_APIM}`);
+  const rows = (data.value || [])
+    .map(
+      (s) => `<tr>
+        <td>${s.name}</td>
+        <td>${s.location}</td>
+        <td>${s.sku?.name ?? ""}</td>
+        <td>${s.properties?.provisioningState ?? ""}</td>
+        <td>${s.properties?.gatewayUrl ?? ""}</td>
+        <td><button class="link" onclick="deleteAPIM('${s.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("apimTable").innerHTML = rows;
+}
+
+async function createAPIM() {
+  const name = document.getElementById("newApimName").value.trim();
+  const location = document.getElementById("newApimLocation").value.trim();
+  const email = document.getElementById("newApimEmail").value.trim() || "admin@example.com";
+  const publisher = document.getElementById("newApimPublisher").value.trim() || "Emulator";
+  if (!name || !location) return;
+  await api("PUT", `${apimBase()}/${name}?api-version=${API_APIM}`, {
+    location,
+    sku: { name: "Developer", capacity: 1 },
+    properties: { publisherEmail: email, publisherName: publisher },
+  });
+  document.getElementById("newApimName").value = "";
+  loadAPIM();
+}
+
+async function deleteAPIM(name) {
+  await api("DELETE", `${apimBase()}/${name}?api-version=${API_APIM}`);
+  loadAPIM();
+}
+
+// ---- Phase 21: Logic Apps (Microsoft.Logic, api-version 2019-05-01) ----
+const API_LA = "2019-05-01";
+
+function logicBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.Logic/workflows`;
+}
+
+async function loadLogicApps() {
+  const data = await api("GET", `${logicBase()}?api-version=${API_LA}`);
+  const rows = (data.value || [])
+    .map(
+      (w) => `<tr>
+        <td>${w.name}</td>
+        <td>${w.location}</td>
+        <td>${w.properties?.provisioningState ?? ""}</td>
+        <td>${w.properties?.accessEndpoint ?? ""}</td>
+        <td>
+          <button class="link" onclick="triggerLogicApp('${w.name}')">Disparar</button>
+          <button class="link" onclick="deleteLogicApp('${w.name}')">Borrar</button>
+        </td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("laTable").innerHTML = rows;
+}
+
+async function createLogicApp() {
+  const name = document.getElementById("newLaName").value.trim();
+  const location = document.getElementById("newLaLocation").value.trim();
+  if (!name || !location) return;
+  await api("PUT", `${logicBase()}/${name}?api-version=${API_LA}`, {
+    location,
+    properties: {
+      definition: {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        contentVersion: "1.0.0.0",
+        triggers: {},
+        actions: {},
+      },
+      state: "Enabled",
+    },
+  });
+  document.getElementById("newLaName").value = "";
+  loadLogicApps();
+}
+
+async function triggerLogicApp(name) {
+  await api("POST", `${logicBase()}/${name}/triggers/manual/run?api-version=${API_LA}`);
+  alert(`Workflow '${name}' disparado`);
+}
+
+async function deleteLogicApp(name) {
+  await api("DELETE", `${logicBase()}/${name}?api-version=${API_LA}`);
+  loadLogicApps();
+}
+
+// ---- Phase 23: SQL Database (Microsoft.Sql, api-version 2022-05-01-preview) ----
+const API_SQL = "2022-05-01-preview";
+
+function sqlServerBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.Sql/servers`;
+}
+
+async function loadSQLServers() {
+  const data = await api("GET", `${sqlServerBase()}?api-version=${API_SQL}`);
+  const rows = (data.value || [])
+    .map(
+      (s) => `<tr>
+        <td>${s.name}</td>
+        <td>${s.location}</td>
+        <td>${s.properties?.state ?? ""}</td>
+        <td>${s.properties?.fullyQualifiedDomainName ?? ""}</td>
+        <td><button class="link" onclick="deleteSQLServer('${s.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("sqlSrvTable").innerHTML = rows;
+}
+
+async function createSQLServer() {
+  const name = document.getElementById("newSqlSrvName").value.trim();
+  const location = document.getElementById("newSqlSrvLocation").value.trim();
+  const login = document.getElementById("newSqlSrvLogin").value.trim() || "sqladmin";
+  if (!name || !location) return;
+  await api("PUT", `${sqlServerBase()}/${name}?api-version=${API_SQL}`, {
+    location,
+    properties: {
+      administratorLogin: login,
+      administratorLoginPassword: "P@ssw0rd1234!",
+      version: "12.0",
+    },
+  });
+  document.getElementById("newSqlSrvName").value = "";
+  loadSQLServers();
+}
+
+async function deleteSQLServer(name) {
+  await api("DELETE", `${sqlServerBase()}/${name}?api-version=${API_SQL}`);
+  loadSQLServers();
+}
+
+async function loadSQLDatabases() {
+  const srv = document.getElementById("sqlSrvFilter").value.trim();
+  if (!srv) { document.getElementById("sqlDbTable").innerHTML = ""; return; }
+  const data = await api("GET", `${sqlServerBase()}/${srv}/databases?api-version=${API_SQL}`);
+  const rows = (data.value || [])
+    .map(
+      (d) => `<tr>
+        <td>${d.name}</td>
+        <td>${d.sku?.name ?? ""}</td>
+        <td>${d.properties?.status ?? ""}</td>
+        <td><button class="link" onclick="deleteSQLDatabase('${srv}', '${d.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("sqlDbTable").innerHTML = rows;
+}
+
+async function createSQLDatabase() {
+  const srv = document.getElementById("sqlSrvFilter").value.trim();
+  const name = document.getElementById("newSqlDbName").value.trim();
+  const sku = document.getElementById("newSqlDbSku").value;
+  if (!srv || !name) return;
+  const srvData = await api("GET", `${sqlServerBase()}/${srv}?api-version=${API_SQL}`);
+  await api("PUT", `${sqlServerBase()}/${srv}/databases/${name}?api-version=${API_SQL}`, {
+    location: srvData.location,
+    sku: { name: sku },
+  });
+  document.getElementById("newSqlDbName").value = "";
+  loadSQLDatabases();
+}
+
+async function deleteSQLDatabase(srv, name) {
+  await api("DELETE", `${sqlServerBase()}/${srv}/databases/${name}?api-version=${API_SQL}`);
+  loadSQLDatabases();
+}
+
+// ---- Phase 24: Container Registry (Microsoft.ContainerRegistry, api-version 2023-01-01-preview) ----
+const API_ACR = "2023-01-01-preview";
+
+function acrBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.ContainerRegistry/registries`;
+}
+
+async function loadACRs() {
+  const data = await api("GET", `${acrBase()}?api-version=${API_ACR}`);
+  const rows = (data.value || [])
+    .map(
+      (r) => `<tr>
+        <td>${r.name}</td>
+        <td>${r.location}</td>
+        <td>${r.sku?.name ?? ""}</td>
+        <td>${r.properties?.provisioningState ?? ""}</td>
+        <td>${r.properties?.loginServer ?? ""}</td>
+        <td><button class="link" onclick="deleteACR('${r.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("acrTable").innerHTML = rows;
+}
+
+async function createACR() {
+  const name = document.getElementById("newAcrName").value.trim();
+  const location = document.getElementById("newAcrLocation").value.trim();
+  const sku = document.getElementById("newAcrSku").value;
+  if (!name || !location) return;
+  await api("PUT", `${acrBase()}/${name}?api-version=${API_ACR}`, {
+    location,
+    sku: { name: sku },
+    properties: { adminUserEnabled: true },
+  });
+  document.getElementById("newAcrName").value = "";
+  loadACRs();
+}
+
+async function deleteACR(name) {
+  await api("DELETE", `${acrBase()}/${name}?api-version=${API_ACR}`);
+  loadACRs();
+}
+
+// ---- Phase 25: Redis Cache (Microsoft.Cache, api-version 2023-08-01) ----
+const API_REDIS = "2023-08-01";
+
+function redisBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.Cache/redis`;
+}
+
+async function loadRedis() {
+  const data = await api("GET", `${redisBase()}?api-version=${API_REDIS}`);
+  const rows = (data.value || [])
+    .map(
+      (r) => `<tr>
+        <td>${r.name}</td>
+        <td>${r.location}</td>
+        <td>${r.properties?.sku?.name ?? ""} C${r.properties?.sku?.capacity ?? ""}</td>
+        <td>${r.properties?.provisioningState ?? ""}</td>
+        <td>${r.properties?.hostName ?? ""}</td>
+        <td><button class="link" onclick="deleteRedis('${r.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("redisTable").innerHTML = rows;
+}
+
+async function createRedis() {
+  const name = document.getElementById("newRedisName").value.trim();
+  const location = document.getElementById("newRedisLocation").value.trim();
+  const skuName = document.getElementById("newRedisSku").value;
+  const capacityMap = { Basic: 0, Standard: 1, Premium: 1 };
+  const familyMap = { Basic: "C", Standard: "C", Premium: "P" };
+  if (!name || !location) return;
+  await api("PUT", `${redisBase()}/${name}?api-version=${API_REDIS}`, {
+    location,
+    properties: {
+      sku: { name: skuName, family: familyMap[skuName] || "C", capacity: capacityMap[skuName] ?? 1 },
+    },
+  });
+  document.getElementById("newRedisName").value = "";
+  loadRedis();
+}
+
+async function deleteRedis(name) {
+  await api("DELETE", `${redisBase()}/${name}?api-version=${API_REDIS}`);
+  loadRedis();
+}
+
+// ---- Phase 26: Container Instances (Microsoft.ContainerInstance, api-version 2023-05-01) ----
+const API_ACI = "2023-05-01";
+
+function aciBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.ContainerInstance/containerGroups`;
+}
+
+async function loadACIs() {
+  const data = await api("GET", `${aciBase()}?api-version=${API_ACI}`);
+  const rows = (data.value || [])
+    .map(
+      (g) => `<tr>
+        <td>${g.name}</td>
+        <td>${g.location}</td>
+        <td>${g.properties?.provisioningState ?? ""}</td>
+        <td>${g.properties?.ipAddress?.ip ?? ""}</td>
+        <td>${g.properties?.ipAddress?.fqdn ?? ""}</td>
+        <td><button class="link" onclick="deleteACI('${g.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("aciTable").innerHTML = rows;
+}
+
+async function createACI() {
+  const name = document.getElementById("newAciName").value.trim();
+  const location = document.getElementById("newAciLocation").value.trim();
+  const image = document.getElementById("newAciImage").value.trim() || "nginx:latest";
+  if (!name || !location) return;
+  await api("PUT", `${aciBase()}/${name}?api-version=${API_ACI}`, {
+    location,
+    properties: {
+      osType: "Linux",
+      ipAddress: { type: "Public", ports: [{ port: 80, protocol: "TCP" }] },
+      containers: [{
+        name: "container1",
+        properties: { image, resources: { requests: { cpu: 1, memoryInGB: 1.5 } }, ports: [{ port: 80 }] },
+      }],
+    },
+  });
+  document.getElementById("newAciName").value = "";
+  loadACIs();
+}
+
+async function deleteACI(name) {
+  await api("DELETE", `${aciBase()}/${name}?api-version=${API_ACI}`);
+  loadACIs();
+}
+
+// ---- Phase 27: Azure Policy (Microsoft.Authorization, api-version 2021-06-01) ----
+const API_POLICY = "2021-06-01";
+
+function policyDefBase() {
+  return `/subscriptions/${sub()}/providers/Microsoft.Authorization/policyDefinitions`;
+}
+
+function policyAssignBase() {
+  return `/subscriptions/${sub()}/providers/Microsoft.Authorization/policyAssignments`;
+}
+
+async function loadPolicyDefinitions() {
+  const data = await api("GET", `${policyDefBase()}?api-version=${API_POLICY}`);
+  const rows = (data.value || [])
+    .map(
+      (d) => `<tr>
+        <td>${d.name}</td>
+        <td>${d.properties?.displayName ?? ""}</td>
+        <td>${d.properties?.policyType ?? ""}</td>
+        <td>${d.properties?.mode ?? ""}</td>
+        <td><button class="link" onclick="deletePolicyDefinition('${d.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("pdTable").innerHTML = rows;
+}
+
+async function createPolicyDefinition() {
+  const name = document.getElementById("newPdName").value.trim();
+  const displayName = document.getElementById("newPdDisplayName").value.trim() || name;
+  if (!name) return;
+  await api("PUT", `${policyDefBase()}/${name}?api-version=${API_POLICY}`, {
+    properties: {
+      policyType: "Custom",
+      mode: "All",
+      displayName,
+      policyRule: { if: { field: "type", equals: "Microsoft.Network/publicIPAddresses" }, then: { effect: "audit" } },
+    },
+  });
+  document.getElementById("newPdName").value = "";
+  document.getElementById("newPdDisplayName").value = "";
+  loadPolicyDefinitions();
+}
+
+async function deletePolicyDefinition(name) {
+  await api("DELETE", `${policyDefBase()}/${name}?api-version=${API_POLICY}`);
+  loadPolicyDefinitions();
+}
+
+async function loadPolicyAssignments() {
+  const data = await api("GET", `${policyAssignBase()}?api-version=${API_POLICY}`);
+  const rows = (data.value || [])
+    .map(
+      (a) => `<tr>
+        <td>${a.name}</td>
+        <td>${a.properties?.displayName ?? ""}</td>
+        <td>${a.properties?.provisioningState ?? ""}</td>
+        <td><button class="link" onclick="deletePolicyAssignment('${a.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("paTable").innerHTML = rows;
+}
+
+async function createPolicyAssignment() {
+  const name = document.getElementById("newPaName").value.trim();
+  const policyId = document.getElementById("newPaPolicyId").value.trim();
+  if (!name || !policyId) return;
+  await api("PUT", `${policyAssignBase()}/${name}?api-version=${API_POLICY}`, {
+    properties: {
+      policyDefinitionId: policyId,
+      displayName: name,
+      enforcementMode: "DoNotEnforce",
+    },
+  });
+  document.getElementById("newPaName").value = "";
+  document.getElementById("newPaPolicyId").value = "";
+  loadPolicyAssignments();
+}
+
+async function deletePolicyAssignment(name) {
+  await api("DELETE", `${policyAssignBase()}/${name}?api-version=${API_POLICY}`);
+  loadPolicyAssignments();
+}
+
+// ---- Phase 29: Static Web Apps (Microsoft.Web/staticSites, api-version 2022-09-01) ----
+const API_SWA = "2022-09-01";
+
+function swaBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.Web/staticSites`;
+}
+
+async function loadStaticSites() {
+  const data = await api("GET", `${swaBase()}?api-version=${API_SWA}`);
+  const rows = (data.value || [])
+    .map(
+      (s) => `<tr>
+        <td>${s.name}</td>
+        <td>${s.location}</td>
+        <td>${s.sku?.name ?? ""}</td>
+        <td>${s.properties?.defaultHostname ?? ""}</td>
+        <td><button class="link" onclick="deleteStaticSite('${s.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("swaTable").innerHTML = rows;
+}
+
+async function createStaticSite() {
+  const name = document.getElementById("newSwaName").value.trim();
+  const location = document.getElementById("newSwaLocation").value.trim() || "eastus2";
+  if (!name) return;
+  await api("PUT", `${swaBase()}/${name}?api-version=${API_SWA}`, {
+    location,
+    sku: { name: "Free", tier: "Free" },
+    properties: {},
+  });
+  document.getElementById("newSwaName").value = "";
+  loadStaticSites();
+}
+
+async function deleteStaticSite(name) {
+  await api("DELETE", `${swaBase()}/${name}?api-version=${API_SWA}`);
+  loadStaticSites();
+}
+
+// ---- Phase 30: PostgreSQL Flexible Server (Microsoft.DBforPostgreSQL, api-version 2022-12-01) ----
+const API_PG = "2022-12-01";
+
+function pgBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.DBforPostgreSQL/flexibleServers`;
+}
+
+async function loadPostgres() {
+  const data = await api("GET", `${pgBase()}?api-version=${API_PG}`);
+  const rows = (data.value || [])
+    .map(
+      (s) => `<tr>
+        <td>${s.name}</td>
+        <td>${s.location}</td>
+        <td>${s.properties?.version ?? ""}</td>
+        <td>${s.sku?.name ?? ""}</td>
+        <td>${s.properties?.state ?? ""}</td>
+        <td>${s.properties?.fullyQualifiedDomainName ?? ""}</td>
+        <td><button class="link" onclick="deletePostgres('${s.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("pgTable").innerHTML = rows;
+}
+
+async function createPostgres() {
+  const name = document.getElementById("newPgName").value.trim();
+  const location = document.getElementById("newPgLocation").value.trim();
+  const version = document.getElementById("newPgVersion").value.trim() || "16";
+  const login = document.getElementById("newPgLogin").value.trim() || "pgadmin";
+  if (!name || !location) return;
+  await api("PUT", `${pgBase()}/${name}?api-version=${API_PG}`, {
+    location,
+    sku: { name: "B_Standard_B1ms", tier: "Burstable" },
+    properties: {
+      administratorLogin: login,
+      administratorLoginPassword: "P@ssw0rd1234!",
+      version,
+      storage: { storageSizeGB: 32 },
+    },
+  });
+  document.getElementById("newPgName").value = "";
+  loadPostgres();
+}
+
+async function deletePostgres(name) {
+  await api("DELETE", `${pgBase()}/${name}?api-version=${API_PG}`);
+  loadPostgres();
+}
+
+// ---- Phase 30: MySQL Flexible Server (Microsoft.DBforMySQL, api-version 2023-06-30) ----
+const API_MY = "2023-06-30";
+
+function myBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.DBforMySQL/flexibleServers`;
+}
+
+async function loadMySQL() {
+  const data = await api("GET", `${myBase()}?api-version=${API_MY}`);
+  const rows = (data.value || [])
+    .map(
+      (s) => `<tr>
+        <td>${s.name}</td>
+        <td>${s.location}</td>
+        <td>${s.properties?.version ?? ""}</td>
+        <td>${s.sku?.name ?? ""}</td>
+        <td>${s.properties?.state ?? ""}</td>
+        <td>${s.properties?.fullyQualifiedDomainName ?? ""}</td>
+        <td><button class="link" onclick="deleteMySQL('${s.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("myTable").innerHTML = rows;
+}
+
+async function createMySQL() {
+  const name = document.getElementById("newMyName").value.trim();
+  const location = document.getElementById("newMyLocation").value.trim();
+  const version = document.getElementById("newMyVersion").value.trim() || "8.0.21";
+  const login = document.getElementById("newMyLogin").value.trim() || "mysqladmin";
+  if (!name || !location) return;
+  await api("PUT", `${myBase()}/${name}?api-version=${API_MY}`, {
+    location,
+    sku: { name: "Standard_B1ms", tier: "Burstable" },
+    properties: {
+      administratorLogin: login,
+      administratorLoginPassword: "P@ssw0rd1234!",
+      version,
+      storage: { storageSizeGB: 20, autoGrow: "Enabled" },
+    },
+  });
+  document.getElementById("newMyName").value = "";
+  loadMySQL();
+}
+
+async function deleteMySQL(name) {
+  await api("DELETE", `${myBase()}/${name}?api-version=${API_MY}`);
+  loadMySQL();
+}
+
+// ---- Phase 31: Recovery Services Vault (Microsoft.RecoveryServices, api-version 2023-04-01) ----
+const API_RSV = "2023-04-01";
+
+function rsvBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.RecoveryServices/vaults`;
+}
+
+async function loadRSVs() {
+  const data = await api("GET", `${rsvBase()}?api-version=${API_RSV}`);
+  const rows = (data.value || [])
+    .map(
+      (v) => `<tr>
+        <td>${v.name}</td>
+        <td>${v.location}</td>
+        <td>${v.sku?.name ?? ""}</td>
+        <td>${v.properties?.provisioningState ?? ""}</td>
+        <td><button class="link" onclick="deleteRSV('${v.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("rsvTable").innerHTML = rows;
+}
+
+async function createRSV() {
+  const name = document.getElementById("newRsvName").value.trim();
+  const location = document.getElementById("newRsvLocation").value.trim();
+  const sku = document.getElementById("newRsvSku").value;
+  if (!name || !location) return;
+  await api("PUT", `${rsvBase()}/${name}?api-version=${API_RSV}`, {
+    location,
+    sku: { name: sku },
+    properties: {},
+  });
+  document.getElementById("newRsvName").value = "";
+  loadRSVs();
+}
+
+async function deleteRSV(name) {
+  await api("DELETE", `${rsvBase()}/${name}?api-version=${API_RSV}`);
+  loadRSVs();
+}
+
+// ---- Phase 32: Notification Hubs (Microsoft.NotificationHubs, api-version 2017-04-01) ----
+const API_NH = "2017-04-01";
+
+function nhNsBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.NotificationHubs/namespaces`;
+}
+
+async function loadNHNamespaces() {
+  const data = await api("GET", `${nhNsBase()}?api-version=${API_NH}`);
+  const rows = (data.value || [])
+    .map(
+      (ns) => `<tr>
+        <td>${ns.name}</td>
+        <td>${ns.location}</td>
+        <td>${ns.sku?.name ?? ""}</td>
+        <td>${ns.properties?.provisioningState ?? ""}</td>
+        <td>${ns.properties?.serviceBusEndpoint ?? ""}</td>
+        <td><button class="link" onclick="deleteNHNamespace('${ns.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("nhNsTable").innerHTML = rows;
+}
+
+async function createNHNamespace() {
+  const name = document.getElementById("newNhNsName").value.trim();
+  const location = document.getElementById("newNhNsLocation").value.trim();
+  const sku = document.getElementById("newNhNsSku").value;
+  if (!name || !location) return;
+  await api("PUT", `${nhNsBase()}/${name}?api-version=${API_NH}`, {
+    location,
+    sku: { name: sku },
+    properties: { namespaceType: "NotificationHub" },
+  });
+  document.getElementById("newNhNsName").value = "";
+  loadNHNamespaces();
+}
+
+async function deleteNHNamespace(name) {
+  await api("DELETE", `${nhNsBase()}/${name}?api-version=${API_NH}`);
+  loadNHNamespaces();
+}
+
+async function loadNHHubs() {
+  const ns = document.getElementById("nhNsFilter").value.trim();
+  if (!ns) { document.getElementById("nhHubTable").innerHTML = ""; return; }
+  const data = await api("GET", `${nhNsBase()}/${ns}/notificationHubs?api-version=${API_NH}`);
+  const rows = (data.value || [])
+    .map(
+      (h) => `<tr>
+        <td>${h.name}</td>
+        <td><button class="link" onclick="deleteNHHub('${ns}', '${h.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("nhHubTable").innerHTML = rows;
+}
+
+async function createNHHub() {
+  const ns = document.getElementById("nhNsFilter").value.trim();
+  const name = document.getElementById("newNhHubName").value.trim();
+  if (!ns || !name) return;
+  const nsData = await api("GET", `${nhNsBase()}/${ns}?api-version=${API_NH}`);
+  await api("PUT", `${nhNsBase()}/${ns}/notificationHubs/${name}?api-version=${API_NH}`, {
+    location: nsData.location,
+    properties: {},
+  });
+  document.getElementById("newNhHubName").value = "";
+  loadNHHubs();
+}
+
+async function deleteNHHub(ns, name) {
+  await api("DELETE", `${nhNsBase()}/${ns}/notificationHubs/${name}?api-version=${API_NH}`);
+  loadNHHubs();
+}
+
+// ---- Phase 32: SignalR (Microsoft.SignalRService, api-version 2023-02-01) ----
+const API_SR = "2023-02-01";
+
+function srBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.SignalRService/signalR`;
+}
+
+async function loadSignalR() {
+  const data = await api("GET", `${srBase()}?api-version=${API_SR}`);
+  const rows = (data.value || [])
+    .map(
+      (s) => `<tr>
+        <td>${s.name}</td>
+        <td>${s.location}</td>
+        <td>${s.sku?.name ?? ""}</td>
+        <td>${s.properties?.provisioningState ?? ""}</td>
+        <td>${s.properties?.hostName ?? ""}</td>
+        <td><button class="link" onclick="deleteSignalR('${s.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("srTable").innerHTML = rows;
+}
+
+async function createSignalR() {
+  const name = document.getElementById("newSrName").value.trim();
+  const location = document.getElementById("newSrLocation").value.trim();
+  const sku = document.getElementById("newSrSku").value;
+  if (!name || !location) return;
+  await api("PUT", `${srBase()}/${name}?api-version=${API_SR}`, {
+    location,
+    sku: { name: sku, capacity: 1 },
+    properties: {},
+  });
+  document.getElementById("newSrName").value = "";
+  loadSignalR();
+}
+
+async function deleteSignalR(name) {
+  await api("DELETE", `${srBase()}/${name}?api-version=${API_SR}`);
+  loadSignalR();
+}
+
+// ---- Phase 33: Private Endpoints (Microsoft.Network, api-version 2023-09-01) ----
+const API_PE = "2023-09-01";
+
+function peBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.Network/privateEndpoints`;
+}
+
+async function loadPrivateEndpoints() {
+  const data = await api("GET", `${peBase()}?api-version=${API_PE}`);
+  const rows = (data.value || [])
+    .map(
+      (pe) => `<tr>
+        <td>${pe.name}</td>
+        <td>${pe.location}</td>
+        <td>${pe.properties?.provisioningState ?? ""}</td>
+        <td>${pe.properties?.privateLinkServiceConnections?.[0]?.properties?.privateLinkServiceConnectionState?.status ?? ""}</td>
+        <td><button class="link" onclick="deletePrivateEndpoint('${pe.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("peTable").innerHTML = rows;
+}
+
+async function createPrivateEndpoint() {
+  const name = document.getElementById("newPeName").value.trim();
+  const location = document.getElementById("newPeLocation").value.trim();
+  const subnetId = document.getElementById("newPeSubnetId").value.trim();
+  const resourceId = document.getElementById("newPeResourceId").value.trim();
+  const groupId = document.getElementById("newPeGroupId").value.trim() || "blob";
+  if (!name || !location || !subnetId || !resourceId) return;
+  await api("PUT", `${peBase()}/${name}?api-version=${API_PE}`, {
+    location,
+    properties: {
+      subnet: { id: subnetId },
+      privateLinkServiceConnections: [{
+        name: "conn1",
+        properties: { privateLinkServiceId: resourceId, groupIds: [groupId] },
+      }],
+    },
+  });
+  document.getElementById("newPeName").value = "";
+  document.getElementById("newPeSubnetId").value = "";
+  document.getElementById("newPeResourceId").value = "";
+  loadPrivateEndpoints();
+}
+
+async function deletePrivateEndpoint(name) {
+  await api("DELETE", `${peBase()}/${name}?api-version=${API_PE}`);
+  loadPrivateEndpoints();
+}
+
 // ---- initial load ----
 refreshAll();

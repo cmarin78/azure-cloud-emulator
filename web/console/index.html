@@ -29,6 +29,23 @@
       <button class="nav-item" data-view="network">Networking</button>
       <button class="nav-item" data-view="aks">AKS</button>
       <button class="nav-item" data-view="functions">Functions</button>
+      <button class="nav-item" data-view="eventhub">Event Hubs</button>
+      <button class="nav-item" data-view="eventgrid">Event Grid</button>
+      <button class="nav-item" data-view="identity">Managed Identity</button>
+      <button class="nav-item" data-view="apim">API Management</button>
+      <button class="nav-item" data-view="logicapps">Logic Apps</button>
+      <button class="nav-item" data-view="sql">SQL Database</button>
+      <button class="nav-item" data-view="acr">Container Registry</button>
+      <button class="nav-item" data-view="redis">Redis Cache</button>
+      <button class="nav-item" data-view="aci">Container Instances</button>
+      <button class="nav-item" data-view="policy">Policy</button>
+      <button class="nav-item" data-view="staticsite">Static Web Apps</button>
+      <button class="nav-item" data-view="postgres">PostgreSQL</button>
+      <button class="nav-item" data-view="mysql">MySQL</button>
+      <button class="nav-item" data-view="rsv">Recovery Vault</button>
+      <button class="nav-item" data-view="nhub">Notification Hubs</button>
+      <button class="nav-item" data-view="signalr">SignalR</button>
+      <button class="nav-item" data-view="pe">Private Endpoints</button>
     </nav>
 
     <main class="content">
@@ -307,6 +324,339 @@
         <table>
           <thead><tr><th>Nombre</th><th>Language</th><th>Invoke URL</th><th></th></tr></thead>
           <tbody id="funcTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 15: Event Hubs -->
+      <section id="view-eventhub" class="view">
+        <h1>Event Hubs — Namespaces</h1>
+        <p class="hint">Listados dentro del resource group seleccionado. Event hubs individuales se administran con <code>az</code>/Terraform.</p>
+        <div class="toolbar">
+          <input id="newEhName" placeholder="nombre del namespace" />
+          <input id="newEhLocation" placeholder="location" value="eastus" />
+          <select id="newEhSku"><option value="Basic">Basic</option><option value="Standard" selected>Standard</option><option value="Premium">Premium</option></select>
+          <button onclick="createEHNamespace()">Crear namespace</button>
+          <button onclick="loadEHNamespaces()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th>Endpoint</th><th></th></tr></thead>
+          <tbody id="ehTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 16: Event Grid -->
+      <section id="view-eventgrid" class="view">
+        <h1>Event Grid — Topics</h1>
+        <p class="hint">Listados dentro del resource group seleccionado. Las suscripciones se administran con <code>az</code>/Terraform.</p>
+        <div class="toolbar">
+          <input id="newEgName" placeholder="nombre del topic" />
+          <input id="newEgLocation" placeholder="location" value="eastus" />
+          <button onclick="createEGTopic()">Crear topic</button>
+          <button onclick="loadEGTopics()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Endpoint</th><th></th></tr></thead>
+          <tbody id="egTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 17: Managed Identity -->
+      <section id="view-identity" class="view">
+        <h1>Managed Identity — User Assigned</h1>
+        <p class="hint">Listadas dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newMiName" placeholder="nombre de la identidad" />
+          <input id="newMiLocation" placeholder="location" value="eastus" />
+          <button onclick="createManagedIdentity()">Crear identidad</button>
+          <button onclick="loadManagedIdentities()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Client ID</th><th>Principal ID</th><th></th></tr></thead>
+          <tbody id="miTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 18: API Management -->
+      <section id="view-apim" class="view">
+        <h1>API Management — Services</h1>
+        <p class="hint">Listados dentro del resource group seleccionado. Creación es asíncrona (provisioningState=Creating). APIs y productos se administran con <code>az</code>/Terraform.</p>
+        <div class="toolbar">
+          <input id="newApimName" placeholder="nombre del servicio" />
+          <input id="newApimLocation" placeholder="location" value="eastus" />
+          <input id="newApimEmail" placeholder="publisher email" value="admin@example.com" />
+          <input id="newApimPublisher" placeholder="publisher name" value="Emulator" />
+          <button onclick="createAPIM()">Crear APIM</button>
+          <button onclick="loadAPIM()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th>Gateway URL</th><th></th></tr></thead>
+          <tbody id="apimTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 21: Logic Apps -->
+      <section id="view-logicapps" class="view">
+        <h1>Logic Apps — Workflows</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newLaName" placeholder="nombre del workflow" />
+          <input id="newLaLocation" placeholder="location" value="eastus" />
+          <button onclick="createLogicApp()">Crear workflow (vacío)</button>
+          <button onclick="loadLogicApps()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Access endpoint</th><th></th></tr></thead>
+          <tbody id="laTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 23: SQL Database -->
+      <section id="view-sql" class="view">
+        <h1>SQL Database</h1>
+        <p class="hint">Listado dentro del resource group seleccionado.</p>
+
+        <h2>SQL Servers</h2>
+        <div class="toolbar">
+          <input id="newSqlSrvName" placeholder="nombre del server" />
+          <input id="newSqlSrvLocation" placeholder="location" value="eastus" />
+          <input id="newSqlSrvLogin" placeholder="admin login" value="sqladmin" />
+          <button onclick="createSQLServer()">Crear server</button>
+          <button onclick="loadSQLServers()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>FQDN</th><th></th></tr></thead>
+          <tbody id="sqlSrvTable"></tbody>
+        </table>
+
+        <h2>SQL Databases</h2>
+        <p class="hint">Selecciona un server arriba para listar sus databases.</p>
+        <div class="toolbar">
+          <input id="sqlSrvFilter" placeholder="nombre del server" onchange="loadSQLDatabases()" />
+          <input id="newSqlDbName" placeholder="nombre de la database" />
+          <select id="newSqlDbSku"><option value="Basic">Basic</option><option value="S0">S0</option><option value="GP_S_Gen5_2">GP_S_Gen5_2</option></select>
+          <button onclick="createSQLDatabase()">Crear database</button>
+          <button onclick="loadSQLDatabases()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>SKU</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="sqlDbTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 24: Container Registry -->
+      <section id="view-acr" class="view">
+        <h1>Container Registry</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newAcrName" placeholder="nombre del registry" />
+          <input id="newAcrLocation" placeholder="location" value="eastus" />
+          <select id="newAcrSku"><option value="Basic" selected>Basic</option><option value="Standard">Standard</option><option value="Premium">Premium</option></select>
+          <button onclick="createACR()">Crear registry</button>
+          <button onclick="loadACRs()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th>Login server</th><th></th></tr></thead>
+          <tbody id="acrTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 25: Redis Cache -->
+      <section id="view-redis" class="view">
+        <h1>Redis Cache</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newRedisName" placeholder="nombre del cache" />
+          <input id="newRedisLocation" placeholder="location" value="eastus" />
+          <select id="newRedisSku"><option value="Basic">Basic C0</option><option value="Standard" selected>Standard C1</option><option value="Premium">Premium P1</option></select>
+          <button onclick="createRedis()">Crear cache</button>
+          <button onclick="loadRedis()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th>Hostname</th><th></th></tr></thead>
+          <tbody id="redisTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 26: Container Instances -->
+      <section id="view-aci" class="view">
+        <h1>Container Instances — Container Groups</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newAciName" placeholder="nombre del container group" />
+          <input id="newAciLocation" placeholder="location" value="eastus" />
+          <input id="newAciImage" placeholder="imagen (ej. nginx:latest)" value="nginx:latest" />
+          <button onclick="createACI()">Crear container group</button>
+          <button onclick="loadACIs()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>IP</th><th>FQDN</th><th></th></tr></thead>
+          <tbody id="aciTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 27: Azure Policy -->
+      <section id="view-policy" class="view">
+        <h1>Azure Policy</h1>
+
+        <h2>Policy Definitions</h2>
+        <div class="toolbar">
+          <input id="newPdName" placeholder="nombre de la policy definition" />
+          <input id="newPdDisplayName" placeholder="display name" />
+          <button onclick="createPolicyDefinition()">Crear definition</button>
+          <button onclick="loadPolicyDefinitions()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Display name</th><th>Tipo</th><th>Modo</th><th></th></tr></thead>
+          <tbody id="pdTable"></tbody>
+        </table>
+
+        <h2>Policy Assignments</h2>
+        <div class="toolbar">
+          <input id="newPaName" placeholder="nombre de la assignment" />
+          <input id="newPaPolicyId" placeholder="policyDefinitionId" style="width:340px" />
+          <button onclick="createPolicyAssignment()">Crear assignment</button>
+          <button onclick="loadPolicyAssignments()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Display name</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="paTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 29: Static Web Apps -->
+      <section id="view-staticsite" class="view">
+        <h1>Static Web Apps</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newSwaName" placeholder="nombre del static site" />
+          <input id="newSwaLocation" placeholder="location" value="eastus2" />
+          <button onclick="createStaticSite()">Crear static site</button>
+          <button onclick="loadStaticSites()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Default hostname</th><th></th></tr></thead>
+          <tbody id="swaTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 30: PostgreSQL -->
+      <section id="view-postgres" class="view">
+        <h1>PostgreSQL Flexible Server</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newPgName" placeholder="nombre del server" />
+          <input id="newPgLocation" placeholder="location" value="eastus" />
+          <input id="newPgVersion" placeholder="version" value="16" />
+          <input id="newPgLogin" placeholder="admin login" value="pgadmin" />
+          <button onclick="createPostgres()">Crear server</button>
+          <button onclick="loadPostgres()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Versión</th><th>SKU</th><th>Estado</th><th>FQDN</th><th></th></tr></thead>
+          <tbody id="pgTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 30: MySQL -->
+      <section id="view-mysql" class="view">
+        <h1>MySQL Flexible Server</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newMyName" placeholder="nombre del server" />
+          <input id="newMyLocation" placeholder="location" value="eastus" />
+          <input id="newMyVersion" placeholder="version" value="8.0.21" />
+          <input id="newMyLogin" placeholder="admin login" value="mysqladmin" />
+          <button onclick="createMySQL()">Crear server</button>
+          <button onclick="loadMySQL()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Versión</th><th>SKU</th><th>Estado</th><th>FQDN</th><th></th></tr></thead>
+          <tbody id="myTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 31: Recovery Services Vault -->
+      <section id="view-rsv" class="view">
+        <h1>Recovery Services Vault</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newRsvName" placeholder="nombre del vault" />
+          <input id="newRsvLocation" placeholder="location" value="eastus" />
+          <select id="newRsvSku"><option value="Standard" selected>Standard</option><option value="RS0">RS0</option></select>
+          <button onclick="createRSV()">Crear vault</button>
+          <button onclick="loadRSVs()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="rsvTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 32: Notification Hubs -->
+      <section id="view-nhub" class="view">
+        <h1>Notification Hubs</h1>
+        <p class="hint">Namespaces y hubs dentro del resource group seleccionado.</p>
+
+        <h2>NH Namespaces</h2>
+        <div class="toolbar">
+          <input id="newNhNsName" placeholder="nombre del namespace" />
+          <input id="newNhNsLocation" placeholder="location" value="eastus" />
+          <select id="newNhNsSku"><option value="Free" selected>Free</option><option value="Basic">Basic</option><option value="Standard">Standard</option></select>
+          <button onclick="createNHNamespace()">Crear namespace</button>
+          <button onclick="loadNHNamespaces()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th>ServiceBus endpoint</th><th></th></tr></thead>
+          <tbody id="nhNsTable"></tbody>
+        </table>
+
+        <h2>Notification Hubs</h2>
+        <p class="hint">Elige un namespace para listar/crear sus hubs.</p>
+        <div class="toolbar">
+          <input id="nhNsFilter" placeholder="nombre del namespace" onchange="loadNHHubs()" />
+          <input id="newNhHubName" placeholder="nombre del hub" />
+          <button onclick="createNHHub()">Crear hub</button>
+          <button onclick="loadNHHubs()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th></th></tr></thead>
+          <tbody id="nhHubTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 32: SignalR -->
+      <section id="view-signalr" class="view">
+        <h1>SignalR Service</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newSrName" placeholder="nombre del servicio" />
+          <input id="newSrLocation" placeholder="location" value="eastus" />
+          <select id="newSrSku"><option value="Free_F1" selected>Free_F1</option><option value="Standard_S1">Standard_S1</option></select>
+          <button onclick="createSignalR()">Crear servicio</button>
+          <button onclick="loadSignalR()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th>Hostname</th><th></th></tr></thead>
+          <tbody id="srTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 33: Private Endpoints -->
+      <section id="view-pe" class="view">
+        <h1>Private Endpoints</h1>
+        <p class="hint">Listados dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newPeName" placeholder="nombre del private endpoint" />
+          <input id="newPeLocation" placeholder="location" value="eastus" />
+          <input id="newPeSubnetId" placeholder="subnet ID" style="width:360px" />
+          <input id="newPeResourceId" placeholder="privateLinkServiceId (target resource)" style="width:360px" />
+          <input id="newPeGroupId" placeholder="groupId (ej. blob, sqlServer)" value="blob" />
+          <button onclick="createPrivateEndpoint()">Crear endpoint</button>
+          <button onclick="loadPrivateEndpoints()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Connection status</th><th></th></tr></thead>
+          <tbody id="peTable"></tbody>
         </table>
       </section>
 
