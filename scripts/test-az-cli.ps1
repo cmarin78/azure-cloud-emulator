@@ -1,9 +1,8 @@
-# Smoke-test del emulador usando az CLI (PowerShell).
+﻿# Smoke-test del emulador usando az CLI (PowerShell).
 #
 # Igual que la versión .sh: usa `az rest` para apuntar directamente a
 # localhost con el token cacheado de tu sesión real de `az login`. No
-# requiere `az cloud register` (que necesitaría que el emulador implemente
-# descubrimiento de metadata ARM + Azure AD, lo cual no hace todavía).
+# requiere `az cloud register`, facilitando un smoke-test rápido.
 #
 # Los cuerpos JSON se escriben a archivos temporales y se pasan con
 # `--body @archivo`: el shim az.cmd en Windows destroza las comillas dobles

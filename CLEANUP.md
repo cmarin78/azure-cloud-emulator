@@ -15,33 +15,24 @@ housekeeping. Marcar con `[x]` a medida que se completen.
 ## Pendiente
 
 ### Higiene de repo
-- [ ] Revisar `git log -- '**/*.tfstate'` para confirmar que ningún `terraform.tfstate`
-      llegó a commitearse en el pasado (puede contener secretos en texto plano). Si
-      apareciera, purgar del historial con `git filter-repo` o BFG, no solo borrar.
-- [ ] Añadir un pre-commit hook o check en CI que falle si se intenta commitear un
-      binario (`*.exe`) o un `.db` — para que este desorden no se repita.
-- [ ] `bin/` está en `.gitignore` pero los binarios compilados localmente
-      (`azure-emulator.exe`, `.exe~`) tienden a reaparecer ahí; documentar en el
-      README que `bin/` es solo de build local, nunca para distribución.
+- [x] Revisar `git log -- '**/*.tfstate'` para confirmar que ningún `terraform.tfstate`
+      llegó a commitearse en el pasado (puede contener secretos en texto plano).
+- [x] Añadir un check en CI que falle si se intenta commitear un binario (`*.exe`)
+      o un `.db` / `*.tfstate` (implementado en `.github/workflows/ci.yml`).
+- [x] `bin/` está en `.gitignore` y documentado en README que es solo de build local.
 
 ### Documentación
-- [ ] `ROADMAP.md` ya tiene 1020 líneas / 68KB y mezcla fases completadas con
+- [ ] `ROADMAP.md` ya tiene más de 1340 líneas y mezcla fases completadas con
       planificadas. Separar: crear `CHANGELOG.md` (estilo Keep a Changelog, como
-      tiene `ministack`) con las fases 1-21 ya cerradas, y dejar `ROADMAP.md` solo
-      con lo pendiente. Esto también facilita que un usuario nuevo entienda qué
-      *ya funciona* sin leer 1000 líneas.
-- [ ] Falta `CONTRIBUTING.md` y `SECURITY.md`. Si la intención es eventualmente
-      aceptar contribuciones externas (como hace `ministack`), vale la pena
-      definir ahora el proceso (cómo correr tests, estilo de commits, cómo
-      reportar vulnerabilidades).
+      tiene `ministack`) con las fases ya cerradas, y dejar `ROADMAP.md` solo
+      con lo pendiente.
+- [x] Añadidos `CONTRIBUTING.md` y `SECURITY.md`.
 
 ### CI / Calidad
-- [ ] `ci.yml` solo corre `go build`, `go vet` y `go test -race`. No hay linter
-      (`golangci-lint`) ni reporte de cobertura. `ministack` usa `ruff` + 
-      `pytest-cov`; replicar el equivalente Go (`golangci-lint run` +
-      `go test -coverprofile=coverage.out` con badge o reporte en el job).
-- [ ] No hay step de `go mod verify` / `go mod tidy --diff` en CI para detectar
-      dependencias huérfanas o `go.sum` desincronizado.
+- [x] Step de `go mod verify` y `go mod tidy` + diff en CI para detectar dependencias
+      desincronizadas.
+- [x] Reporte de cobertura en CI (`go test -v -race -coverprofile=coverage.out ./...`).
+- [ ] Integrar linter en CI (`golangci-lint run`).
 
 ### Tests
 - [ ] Servicios con varios archivos de implementación pero un solo archivo de test

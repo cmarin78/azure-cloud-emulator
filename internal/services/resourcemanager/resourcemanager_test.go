@@ -102,6 +102,21 @@ func TestProviders(t *testing.T) {
 		t.Fatalf("known provider: status=%d p=%+v", status, p)
 	}
 
+	status = testutil.DoJSON(t, "GET", testutil.WithAPIVersion(srv.URL+"/subscriptions/sub1/providers/Microsoft.Network"), nil, &p)
+	if status != 200 || p.RegistrationState != "Registered" {
+		t.Fatalf("Microsoft.Network: status=%d p=%+v", status, p)
+	}
+	hasPrivateEndpoints := false
+	for _, rt := range p.ResourceTypes {
+		if rt.ResourceType == "privateEndpoints" {
+			hasPrivateEndpoints = true
+			break
+		}
+	}
+	if !hasPrivateEndpoints {
+		t.Fatalf("Microsoft.Network missing privateEndpoints resource type")
+	}
+
 	status = testutil.DoJSON(t, "GET", testutil.WithAPIVersion(srv.URL+"/subscriptions/sub1/providers/Microsoft.Unknown"), nil, &p)
 	if status != 200 || p.RegistrationState != "NotRegistered" {
 		t.Fatalf("unknown provider: status=%d p=%+v", status, p)
@@ -113,6 +128,13 @@ func TestProviders(t *testing.T) {
 	status = testutil.DoJSON(t, "GET", testutil.WithAPIVersion(srv.URL+"/subscriptions/sub1/providers"), nil, &list)
 	if status != 200 || len(list.Value) == 0 {
 		t.Fatalf("list providers: status=%d value=%+v", status, list.Value)
+	}
+	seenNamespaces := make(map[string]bool)
+	for _, prov := range list.Value {
+		if seenNamespaces[prov.Namespace] {
+			t.Fatalf("duplicate provider namespace in list: %s", prov.Namespace)
+		}
+		seenNamespaces[prov.Namespace] = true
 	}
 }
 

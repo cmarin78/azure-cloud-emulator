@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 # Smoke-test del emulador usando az CLI.
 #
-# A diferencia de gcloud, az CLI no tiene un knob simple de
-# "api_endpoint_overrides": el provider azurerm de Terraform y el propio
-# az CLI esperan poder hacer descubrimiento de metadata ARM
-# (GET /metadata/endpoints) y autenticarse contra Azure AD real, ninguna
-# de las cuales implementa (todavía) este emulador — ver ROADMAP.md.
+# El emulador implementa descubrimiento de metadata ARM (/metadata/endpoints),
+# emisor de tokens OAuth2 y TLS autofirmado (-tls) para registrarse como
+# cloud personalizado en az CLI o azurerm.
 #
-# La forma práctica de probar cada endpoint hoy es `az rest`: usa el
-# token cacheado de tu sesión real de `az login` (no lo valida el
-# emulador) pero te deja apuntar a CUALQUIER URL, incluyendo localhost.
+# Para smoke-testing rápido sin necesidad de registrar un cloud custom,
+# este script utiliza `az rest`, que permite apuntar peticiones arbitrarias
+# a cualquier URL (incluyendo localhost) reutilizando el token activo.
 #
 # Uso:
 #   az login            # una sola vez, con cualquier cuenta/tenant

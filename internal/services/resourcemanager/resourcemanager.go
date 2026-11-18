@@ -118,6 +118,8 @@ var registeredNamespaces = []Provider{
 	}},
 	{Namespace: "Microsoft.Storage", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "storageAccounts", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
+		{ResourceType: "storageAccounts/fileServices", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
+		{ResourceType: "storageAccounts/fileServices/shares", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
 	}},
 	{Namespace: "Microsoft.Network", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "virtualNetworks", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
@@ -127,6 +129,9 @@ var registeredNamespaces = []Provider{
 		{ResourceType: "loadBalancers", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
 		{ResourceType: "routeTables", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-09-01"}},
 		{ResourceType: "privateDnsZones", Locations: []string{"global"}, ApiVersions: []string{"2020-06-01"}},
+		{ResourceType: "privateEndpoints", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-09-01", "2022-11-01", "2021-05-01"}},
+		{ResourceType: "privateEndpoints/privateDnsZoneGroups", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-09-01", "2022-11-01"}},
+		{ResourceType: "privateLinkServices", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-09-01", "2022-11-01", "2021-05-01"}},
 	}},
 	{Namespace: "Microsoft.Compute", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "disks", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-04-02"}},
@@ -134,12 +139,18 @@ var registeredNamespaces = []Provider{
 	}},
 	{Namespace: "Microsoft.KeyVault", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "vaults", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-07-01"}},
+		{ResourceType: "vaults/secrets", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-07-01"}},
+		{ResourceType: "vaults/keys", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-07-01"}},
 	}},
 	{Namespace: "Microsoft.ServiceBus", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01-preview"}},
+		{ResourceType: "namespaces/queues", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01-preview"}},
+		{ResourceType: "namespaces/topics", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01-preview"}},
 	}},
 	{Namespace: "Microsoft.DocumentDB", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "databaseAccounts", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-11-15"}},
+		{ResourceType: "databaseAccounts/sqlDatabases", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-11-15"}},
+		{ResourceType: "databaseAccounts/sqlDatabases/containers", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-11-15"}},
 	}},
 	{Namespace: "Microsoft.OperationalInsights", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "workspaces", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01"}},
@@ -151,10 +162,12 @@ var registeredNamespaces = []Provider{
 	{Namespace: "Microsoft.Web", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "serverfarms", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
 		{ResourceType: "sites", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
+		{ResourceType: "sites/functions", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-01-01"}},
 		{ResourceType: "staticSites", Locations: []string{"eastus2", "westus2", "centralus"}, ApiVersions: []string{"2022-09-01", "2021-02-01"}},
 	}},
 	{Namespace: "Microsoft.ContainerService", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "managedClusters", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2024-01-01"}},
+		{ResourceType: "managedClusters/agentPools", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2024-01-01"}},
 	}},
 	{Namespace: "Microsoft.Authorization", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "roleDefinitions", Locations: []string{"global"}, ApiVersions: []string{"2022-04-01"}},
@@ -171,6 +184,8 @@ var registeredNamespaces = []Provider{
 	}},
 	{Namespace: "Microsoft.EventHub", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "namespaces", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01-preview"}},
+		{ResourceType: "namespaces/eventhubs", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01-preview"}},
+		{ResourceType: "namespaces/eventhubs/consumergroups", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-10-01-preview"}},
 	}},
 	{Namespace: "Microsoft.ApiManagement", ResourceTypes: []ProviderResourceType{
 		{ResourceType: "service", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2022-08-01"}},
@@ -211,11 +226,6 @@ var registeredNamespaces = []Provider{
 		{ResourceType: "flexibleServers", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
 		{ResourceType: "flexibleServers/databases", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
 		{ResourceType: "flexibleServers/firewallRules", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
-	}},
-	{Namespace: "Microsoft.Network", ResourceTypes: []ProviderResourceType{
-		{ResourceType: "privateEndpoints", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-09-01", "2022-11-01", "2021-05-01"}},
-		{ResourceType: "privateEndpoints/privateDnsZoneGroups", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-09-01", "2022-11-01"}},
-		{ResourceType: "privateLinkServices", Locations: []string{"eastus", "westus2", "eastus2"}, ApiVersions: []string{"2023-09-01", "2022-11-01", "2021-05-01"}},
 	}},
 }
 
