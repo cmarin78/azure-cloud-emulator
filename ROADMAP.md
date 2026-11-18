@@ -1252,38 +1252,36 @@ to every storage account.
 
 **Verification:** `azurerm_storage_share` apply + plan returns exit code 0 (zero drift). No async wait in the provider for shares — `PUT` returns 201 immediately.
 
-## Phase 25+ — candidate services to broaden coverage 💭 proposed (not yet planned)
+## Phase 25-33 — completed breadth expansion ✅ completed
 
-Phases 0-21 and 23-24 are all done; Phase 22 is an explicitly
-speculative architecture change (real backends), not a breadth play.
-The list below is the other direction: more Azure resource types, same
-shape-only/sync-CRUD-plus-the-occasional-real-behavior philosophy as
-everything shipped so far, picked by cross-referencing what's already
-implemented against what `az`/`azurerm` workflows commonly touch that
-this emulator can't fake yet. Azure SQL Database and Azure Container
-Registry — formerly the top two entries here — are now implemented as
-Phase 23 and Phase 24 respectively (see above). Nothing below is
-committed or scheduled — this is a menu to pick from, not a queue.
+All candidate services from the original breadth list (Phases 25 through 33) have been fully implemented, unit-tested, verified with smoke tests, and hooked into the web console:
 
-| Candidate | Why it'd be valuable | Effort | Status |
+| Phase | Service | Resource Type | Status |
 |---|---|---|---|
-| Azure Database for PostgreSQL/MySQL Flexible Server (`Microsoft.DBforPostgreSQL`/`Microsoft.DBforMySQL`) | Second-most-common managed-DB resource after SQL; also the natural Phase 22 "real backend candidate 2" precursor since it doesn't exist as a shape yet | M | proposed |
-| Azure Container Instances (`Microsoft.ContainerInstance/containerGroups`) | Common quick-deploy target in `azurerm` examples; sync ARM CRUD with a fake IP/FQDN, same depth as AKS's "shape-compatible, not behavior-complete" stance | S | proposed |
-| Redis Cache (`Microsoft.Cache/redis`) | Extremely common companion resource alongside App Service/Functions in real configs; ARM CRUD plus fake `primaryKey`/`hostName`, no real cache behind it | S | proposed |
-| Recovery Services vault (`Microsoft.RecoveryServices/vaults`) + backup policy shapes | Shows up in compliance-oriented Terraform configs; pure shape (no real backup execution), low effort since it's mostly a container resource | S | proposed |
-| Azure Policy (`Microsoft.Authorization/policyDefinitions`, `/policyAssignments`) | Natural extension of the existing `internal/services/authorization` package (Phase 15) rather than a new package; no real policy evaluation, just CRUD + assignment scoping | S | proposed |
-| Storage file shares (extend `internal/services/storageaccounts`) | Storage accounts already exist; file shares are a small data-plane addition reusing the existing account/auth plumbing rather than a new service | S | ✅ done (Phase 28) |
-| Static Web Apps (`Microsoft.Web/staticSites`) | Small extension of the existing App Service package (Phase 11); ARM CRUD plus a fake default hostname | S | ✅ done (Phase 29) |
-| Notification Hubs / SignalR Service | Rounds out the "Eventing" family from Phase 17 with two more commonly-paired-with-Functions resources; ARM CRUD only | S | proposed |
-| Private Endpoints / Private Link (extend `internal/services/network`) | The most common real-Terraform networking gap versus what Phase 12 already covers; shape-only (no real network isolation, same as everything else in `network`) | M | proposed |
+| 25 | Redis Cache | `Microsoft.Cache/redis` | ✅ done |
+| 26 | Azure Container Instances (ACI) | `Microsoft.ContainerInstance/containerGroups` | ✅ done |
+| 27 | Azure Policy | `Microsoft.Authorization/policyDefinitions`, `/policyAssignments` | ✅ done |
+| 28 | Storage file shares | `Microsoft.Storage/storageAccounts/fileServices/shares` | ✅ done |
+| 29 | Static Web Apps | `Microsoft.Web/staticSites` | ✅ done |
+| 30 | PostgreSQL & MySQL Flexible Server | `Microsoft.DBforPostgreSQL/flexibleServers`, `Microsoft.DBforMySQL/flexibleServers` | ✅ done |
+| 31 | Recovery Services vault | `Microsoft.RecoveryServices/vaults` | ✅ done |
+| 32 | Notification Hubs / SignalR Service | `Microsoft.NotificationHubs/namespaces`, `Microsoft.SignalRService/signalR` | ✅ done |
+| 33 | Private Endpoints / Private Link | `Microsoft.Network/privateEndpoints`, `privateLinkServices` | ✅ done |
 
-Suggested ordering if/when this gets picked up: Redis Cache and
-Container Instances first (small, same day, highest real-world
-frequency among what's left), then the rest opportunistically. Each
-would follow the same per-phase checklist as every prior phase:
-implement, unit test, extend the `az rest` + Terraform smoke tests,
-update README/ROADMAP, scoped commit with a push command handed to the
-user.
+For detailed historical release notes on all completed phases, see [CHANGELOG.md](CHANGELOG.md).
+
+## Phase 34+ — candidate services & future directions 💭 proposed
+
+The candidate list below outlines high-value targets to further broaden coverage and depth, cross-referenced with modern Terraform (`azurerm`) modules and cloud-native workloads:
+
+| Candidate | Why it's valuable | Effort | Status |
+|---|---|---|---|
+| Azure App Configuration (`Microsoft.AppConfiguration/configurationStores`) | Standard companion to Key Vault and App Service in enterprise setups; ARM CRUD + `listKeys` connection strings + key-value data plane | S | proposed (Phase 34) |
+| Azure Cognitive Services / Azure OpenAI (`Microsoft.CognitiveServices/accounts`) | Essential for validating modern GenAI / LLM Terraform architectures (`azurerm_cognitive_account`, `azurerm_cognitive_deployment`); ARM CRUD + `listKeys` + fake endpoints | S | proposed (Phase 35) |
+| Azure Application Gateway (`Microsoft.Network/applicationGateways`) | Primary Layer 7 load balancer / WAF in Azure; extends `internal/services/network` with frontend/backend/listener/rule collections | M | proposed (Phase 36) |
+| Azure Bastion (`Microsoft.Network/bastionHosts`) | Ubiquitous component in secure hub-and-spoke landing zones; lightweight ARM CRUD referencing a public IP and subnet | S | proposed (Phase 37) |
+| Activity Log / Monitor Event Sink (`Microsoft.Insights/eventtypes/management/values`) | Fulfills the audit/activity log queries (`az monitor activity-log list`) recording past emulator mutations | S | proposed (Phase 38) |
+| Pluggable real-execution backends (Docker) | Optional real containers (PostgreSQL, MySQL, Redis, Azurite) when clients need actual query execution rather than shape emulation | L | proposed (Phase 22) |
 
 ## Maintenance / cross-cutting (no fixed phase number)
 
