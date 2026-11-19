@@ -227,6 +227,10 @@ var registeredNamespaces = []Provider{
 		{ResourceType: "flexibleServers/databases", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
 		{ResourceType: "flexibleServers/firewallRules", Locations: []string{"eastus", "westus2"}, ApiVersions: []string{"2023-06-30", "2021-05-01"}},
 	}},
+	{Namespace: "Microsoft.AppConfiguration", ResourceTypes: []ProviderResourceType{
+		{ResourceType: "configurationStores", Locations: []string{"eastus", "westus2", "centralus"}, ApiVersions: []string{"2023-03-01", "2020-06-01"}},
+		{ResourceType: "configurationStores/keyValues", Locations: []string{"eastus", "westus2", "centralus"}, ApiVersions: []string{"2023-03-01", "2020-06-01"}},
+	}},
 }
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {

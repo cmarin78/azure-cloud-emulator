@@ -61,12 +61,15 @@ func buildArmCanonicalSegments() map[string]string {
 		"Microsoft.DBforMySQL",
 		"Microsoft.NotificationHubs",
 		"Microsoft.SignalRService",
+		"Microsoft.AppConfiguration",
 
 		// Tipos/sub-tipos de recurso (y acciones) usados en los patrones de
 		// ruta de cada servicio.
 		"storageAccounts",
 		"fileServices",
 		"shares",
+		"configurationStores",
+		"keyValues",
 		"virtualNetworks",
 		"subnets",
 		"networkInterfaces",

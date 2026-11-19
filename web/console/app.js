@@ -54,6 +54,7 @@ function refreshAll() {
   loadRouteTables();
   loadDNSZones();
   loadClusters();
+  loadAppConfig();
 }
 document.getElementById("subInput").addEventListener("change", refreshAll);
 document.getElementById("rgInput").addEventListener("change", refreshAll);
@@ -1689,6 +1690,49 @@ async function createPrivateEndpoint() {
 async function deletePrivateEndpoint(name) {
   await api("DELETE", `${peBase()}/${name}?api-version=${API_PE}`);
   loadPrivateEndpoints();
+}
+
+// ---- Phase 34: App Configuration (Microsoft.AppConfiguration, api-version 2023-03-01) ----
+const API_APPCONFIG = "2023-03-01";
+
+function appConfigBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.AppConfiguration/configurationStores`;
+}
+
+async function loadAppConfig() {
+  const data = await api("GET", `${appConfigBase()}?api-version=${API_APPCONFIG}`);
+  const rows = (data.value || [])
+    .map(
+      (c) => `<tr>
+        <td>${c.name}</td>
+        <td>${c.location}</td>
+        <td>${c.sku?.name ?? ""}</td>
+        <td>${c.properties?.provisioningState ?? ""}</td>
+        <td>${c.properties?.endpoint ?? ""}</td>
+        <td><button class="link" onclick="deleteAppConfig('${c.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("appConfigTable").innerHTML = rows;
+}
+
+async function createAppConfig() {
+  const name = document.getElementById("newAppConfigName").value.trim();
+  const location = document.getElementById("newAppConfigLocation").value.trim();
+  const sku = document.getElementById("newAppConfigSku").value;
+  if (!name || !location) return;
+  await api("PUT", `${appConfigBase()}/${name}?api-version=${API_APPCONFIG}`, {
+    location,
+    sku: { name: sku },
+    properties: { publicNetworkAccess: "Enabled" },
+  });
+  document.getElementById("newAppConfigName").value = "";
+  loadAppConfig();
+}
+
+async function deleteAppConfig(name) {
+  await api("DELETE", `${appConfigBase()}/${name}?api-version=${API_APPCONFIG}`);
+  loadAppConfig();
 }
 
 // ---- initial load ----

@@ -9,9 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [0.34.0] — Phase 34: Azure App Configuration
+
+### Added
+- **`Microsoft.AppConfiguration/configurationStores`** — ARM CRUD (sync) with deterministic endpoint (`https://{name}.azconfig.io`), SKU defaults, and purge protection / retention properties.
+- **`listKeys` action** — Returns deterministic primary/secondary and read-only API access keys with valid connection strings.
+- **`keyValues` sub-resource** — Full ARM CRUD (`PUT`/`GET`/`LIST`/`DELETE`) under configuration stores supporting key and label scoping (`key$label`).
+- **Simulated Data-Plane** — Path-style data plane endpoint (`/{store}.appconfig/kv/{key}`) with label query parameter support.
+- **Web Console view** — App Configuration view in `web/console/` for browsing, creating, and deleting stores.
+
 ### Fixed
-- **ARM Case Normalization (`internal/server/armcase.go`)** — Added canonical segments for all provider namespaces and resource types across Phases 10-33, preventing 404s when `azurerm` or `go-azure-sdk` send lowercased URL paths.
-- **Provider Registration (`internal/services/resourcemanager`)** — Merged duplicate `Microsoft.Network` declarations in `registeredNamespaces` so `privateEndpoints`, `privateDnsZoneGroups`, and `privateLinkServices` are properly returned in provider discovery and no duplicate namespaces appear in provider lists.
+- **ARM Case Normalization (`internal/server/armcase.go`)** — Added canonical segments for all provider namespaces and resource types across Phases 10-34, preventing 404s when `azurerm` or `go-azure-sdk` send lowercased URL paths.
+- **Provider Registration (`internal/services/resourcemanager`)** — Merged duplicate `Microsoft.Network` declarations in `registeredNamespaces` and registered `Microsoft.AppConfiguration`.
 - **Documentation in test scripts** — Corrected obsolete claims in `test-az-cli.sh` and `test-az-cli.ps1` regarding ARM metadata and AAD token support.
 
 ### Added

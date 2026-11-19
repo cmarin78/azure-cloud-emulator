@@ -46,6 +46,7 @@
       <button class="nav-item" data-view="nhub">Notification Hubs</button>
       <button class="nav-item" data-view="signalr">SignalR</button>
       <button class="nav-item" data-view="pe">Private Endpoints</button>
+      <button class="nav-item" data-view="appconfig">App Configuration</button>
     </nav>
 
     <main class="content">
@@ -657,6 +658,23 @@
         <table>
           <thead><tr><th>Nombre</th><th>Location</th><th>Estado</th><th>Connection status</th><th></th></tr></thead>
           <tbody id="peTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 34: App Configuration -->
+      <section id="view-appconfig" class="view">
+        <h1>App Configuration</h1>
+        <p class="hint">Almacenes de configuración dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newAppConfigName" placeholder="nombre del store" />
+          <input id="newAppConfigLocation" placeholder="location" value="eastus" />
+          <select id="newAppConfigSku"><option value="Free">Free</option><option value="Standard" selected>Standard</option></select>
+          <button onclick="createAppConfig()">Crear store</button>
+          <button onclick="loadAppConfig()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th>Endpoint</th><th></th></tr></thead>
+          <tbody id="appConfigTable"></tbody>
         </table>
       </section>
 

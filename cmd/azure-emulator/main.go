@@ -14,6 +14,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/aadtoken"
 	"github.com/cesarmarin/azure-emulator/internal/services/aks"
 	"github.com/cesarmarin/azure-emulator/internal/services/apimanagement"
+	"github.com/cesarmarin/azure-emulator/internal/services/appconfiguration"
 	"github.com/cesarmarin/azure-emulator/internal/services/appservice"
 	"github.com/cesarmarin/azure-emulator/internal/services/armmeta"
 	"github.com/cesarmarin/azure-emulator/internal/services/authorization"
@@ -124,6 +125,8 @@ func main() {
 	mysql.New(db).Register(srv.Mux())
 	notificationhubs.New(db).Register(srv.Mux())
 	signalr.New(db).Register(srv.Mux())
+	appConfigSvc := appconfiguration.New(db)
+	appConfigSvc.Register(srv.Mux())
 	// logicapps dispara de verdad cualquier workflow Enabled con un trigger
 	// Recurrence válido (Fase 21) -- igual que Cloud Scheduler en
 	// gcp-emulator, su New() relanza los goroutines de disparo de cualquier
@@ -136,7 +139,7 @@ func main() {
 	// sus propias rutas; el orden de registro no afecta el ruteo en tiempo
 	// de ejecución de http.ServeMux.
 	deployments.New(db, ops, srv.Mux()).Register(srv.Mux())
-	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc, eventGridSvc, eventHubSvc)
+	registerDataPlane(srv.Mux(), db, keyVaultSvc, serviceBusSvc, cosmosSvc, eventGridSvc, eventHubSvc, appConfigSvc)
 
 	// Descubrimiento de metadata ARM + emisor de tokens AAD falso: permiten
 	// que `az cloud register`/`az login --service-principal` y el provider
@@ -201,7 +204,7 @@ func main() {
 // ("conflicts with pattern"). Por eso este es el único lugar que llama
 // mux.HandleFunc para estos servicios: lee el primer segmento del path
 // una vez y despacha por sufijo al ServeHTTP del servicio que corresponda.
-func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault.Service, serviceBusSvc *servicebus.Service, cosmosSvc *cosmosdb.Service, eventGridSvc *eventgrid.Service, eventHubSvc *eventhub.Service) {
+func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault.Service, serviceBusSvc *servicebus.Service, cosmosSvc *cosmosdb.Service, eventGridSvc *eventgrid.Service, eventHubSvc *eventhub.Service, appConfigSvc *appconfiguration.Service) {
 	blobSvc := blob.New(db)
 	queueSvc := queue.New(db)
 	tableSvc := table.New(db)
@@ -225,9 +228,12 @@ func registerDataPlane(mux *http.ServeMux, db *storage.DB, keyVaultSvc *keyvault
 			eventGridSvc.ServeHTTP(w, r)
 		case strings.HasSuffix(accountResource, ".eventhub"):
 			eventHubSvc.ServeHTTP(w, r)
+		case strings.HasSuffix(accountResource, ".appconfig"):
+			storeName := strings.TrimSuffix(accountResource, ".appconfig")
+			appConfigSvc.ServeDataPlane(w, r, storeName, r.PathValue("path"))
 		default:
 			server.WriteError(w, http.StatusNotFound, "ResourceNotFound",
-				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...', '{account}.queue/...', '{account}.table/...', '{vault}.vault/...', '{namespace}.servicebus/...', '{account}.documents/...', '{topic}.eventgrid/...' o '{namespace}.eventhub/...'")
+				"endpoint de data plane desconocido: se esperaba el shape '{account}.blob/...', '{account}.queue/...', '{account}.table/...', '{vault}.vault/...', '{namespace}.servicebus/...', '{account}.documents/...', '{topic}.eventgrid/...', '{namespace}.eventhub/...' o '{store}.appconfig/...'")
 		}
 	})
 }

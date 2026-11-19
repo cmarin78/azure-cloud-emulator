@@ -1276,7 +1276,7 @@ The candidate list below outlines high-value targets to further broaden coverage
 
 | Candidate | Why it's valuable | Effort | Status |
 |---|---|---|---|
-| Azure App Configuration (`Microsoft.AppConfiguration/configurationStores`) | Standard companion to Key Vault and App Service in enterprise setups; ARM CRUD + `listKeys` connection strings + key-value data plane | S | proposed (Phase 34) |
+| Azure App Configuration (`Microsoft.AppConfiguration/configurationStores`) | Standard companion to Key Vault and App Service in enterprise setups; ARM CRUD + `listKeys` connection strings + key-value data plane | S | ✅ done (Phase 34) |
 | Azure Cognitive Services / Azure OpenAI (`Microsoft.CognitiveServices/accounts`) | Essential for validating modern GenAI / LLM Terraform architectures (`azurerm_cognitive_account`, `azurerm_cognitive_deployment`); ARM CRUD + `listKeys` + fake endpoints | S | proposed (Phase 35) |
 | Azure Application Gateway (`Microsoft.Network/applicationGateways`) | Primary Layer 7 load balancer / WAF in Azure; extends `internal/services/network` with frontend/backend/listener/rule collections | M | proposed (Phase 36) |
 | Azure Bastion (`Microsoft.Network/bastionHosts`) | Ubiquitous component in secure hub-and-spoke landing zones; lightweight ARM CRUD referencing a public IP and subnet | S | proposed (Phase 37) |
