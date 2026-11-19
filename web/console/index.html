@@ -47,6 +47,7 @@
       <button class="nav-item" data-view="signalr">SignalR</button>
       <button class="nav-item" data-view="pe">Private Endpoints</button>
       <button class="nav-item" data-view="appconfig">App Configuration</button>
+      <button class="nav-item" data-view="cognitive">Cognitive / OpenAI</button>
     </nav>
 
     <main class="content">
@@ -675,6 +676,32 @@
         <table>
           <thead><tr><th>Nombre</th><th>Location</th><th>SKU</th><th>Estado</th><th>Endpoint</th><th></th></tr></thead>
           <tbody id="appConfigTable"></tbody>
+        </table>
+      </section>
+
+      <!-- Phase 35: Cognitive Services / OpenAI -->
+      <section id="view-cognitive" class="view">
+        <h1>Cognitive Services / Azure OpenAI</h1>
+        <p class="hint">Cuentas cognitivas y recursos OpenAI dentro del resource group seleccionado.</p>
+        <div class="toolbar">
+          <input id="newCogName" placeholder="nombre de la cuenta" />
+          <input id="newCogLocation" placeholder="location" value="eastus" />
+          <select id="newCogKind">
+            <option value="OpenAI" selected>OpenAI</option>
+            <option value="CognitiveServices">CognitiveServices</option>
+            <option value="TextAnalytics">TextAnalytics</option>
+            <option value="ComputerVision">ComputerVision</option>
+          </select>
+          <select id="newCogSku">
+            <option value="S0" selected>S0</option>
+            <option value="F0">F0</option>
+          </select>
+          <button onclick="createCognitiveAccount()">Crear cuenta</button>
+          <button onclick="loadCognitiveAccounts()">Refrescar</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Location</th><th>Kind</th><th>SKU</th><th>Estado</th><th>Endpoint</th><th></th></tr></thead>
+          <tbody id="cognitiveTable"></tbody>
         </table>
       </section>
 

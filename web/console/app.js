@@ -55,6 +55,7 @@ function refreshAll() {
   loadDNSZones();
   loadClusters();
   loadAppConfig();
+  loadCognitiveAccounts();
 }
 document.getElementById("subInput").addEventListener("change", refreshAll);
 document.getElementById("rgInput").addEventListener("change", refreshAll);
@@ -1733,6 +1734,52 @@ async function createAppConfig() {
 async function deleteAppConfig(name) {
   await api("DELETE", `${appConfigBase()}/${name}?api-version=${API_APPCONFIG}`);
   loadAppConfig();
+}
+
+// ---- Phase 35: Cognitive Services (Microsoft.CognitiveServices, api-version 2023-05-01) ----
+const API_COGNITIVE = "2023-05-01";
+
+function cognitiveBase() {
+  return `/subscriptions/${sub()}/resourceGroups/${rg()}/providers/Microsoft.CognitiveServices/accounts`;
+}
+
+async function loadCognitiveAccounts() {
+  const data = await api("GET", `${cognitiveBase()}?api-version=${API_COGNITIVE}`);
+  const rows = (data.value || [])
+    .map(
+      (c) => `<tr>
+        <td>${c.name}</td>
+        <td>${c.location}</td>
+        <td>${c.kind ?? ""}</td>
+        <td>${c.sku?.name ?? ""}</td>
+        <td>${c.properties?.provisioningState ?? ""}</td>
+        <td><code>${c.properties?.endpoint ?? ""}</code></td>
+        <td><button class="link" onclick="deleteCognitiveAccount('${c.name}')">Borrar</button></td>
+      </tr>`
+    )
+    .join("");
+  document.getElementById("cognitiveTable").innerHTML = rows;
+}
+
+async function createCognitiveAccount() {
+  const name = document.getElementById("newCogName").value.trim();
+  const location = document.getElementById("newCogLocation").value.trim();
+  const kind = document.getElementById("newCogKind").value;
+  const sku = document.getElementById("newCogSku").value;
+  if (!name || !location) return;
+  await api("PUT", `${cognitiveBase()}/${name}?api-version=${API_COGNITIVE}`, {
+    location,
+    kind,
+    sku: { name: sku },
+    properties: { publicNetworkAccess: "Enabled" },
+  });
+  document.getElementById("newCogName").value = "";
+  loadCognitiveAccounts();
+}
+
+async function deleteCognitiveAccount(name) {
+  await api("DELETE", `${cognitiveBase()}/${name}?api-version=${API_COGNITIVE}`);
+  loadCognitiveAccounts();
 }
 
 // ---- initial load ----

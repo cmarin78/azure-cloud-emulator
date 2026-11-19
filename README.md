@@ -26,7 +26,8 @@ Instances), Phase 27 (Azure Policy), Phase 28 (Storage File Shares),
 Phase 29 (Static Web Apps), Phase 30 (PostgreSQL + MySQL Flexible
 Server), Phase 31 (Recovery Services Vault), Phase 32 (Notification
 Hubs + SignalR Service), Phase 33 (Private Endpoints + Private Link
-Services), and Phase 34 (Azure App Configuration). See
+Services), Phase 34 (Azure App Configuration), and Phase 35 (Azure
+Cognitive Services / Azure OpenAI). See
 [ROADMAP.md](ROADMAP.md)
 for what's planned next (the rest of the behavioral/real-delivery layer
 inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
@@ -66,6 +67,7 @@ inspired by gcp-emulator's own Phase 11, plus more breadth candidates).
 | 31 | Recovery Services Vault | `Microsoft.RecoveryServices/vaults` (ARM CRUD, sync) — `sku` (Standard/RS0), `publicNetworkAccess` (default Enabled); read-only sub-resources: `backupConfig/vaultconfig` (softDelete=Enabled, GeoRedundant), `backupPolicies` (always empty list), `backupStorageConfig/vaultStorageConfig`; PUT on backupConfig accepted (no-op); no real backup scheduling |
 | 33 | Private Endpoints + Private Link | `Microsoft.Network/privateEndpoints` (ARM CRUD, sync) — `privateLinkServiceConnections[]` (auto-approved, state=Approved), `subnet.id`, `networkInterfaces[]` (deterministic NIC ID injected); `privateDnsZoneGroups` (full CRUD sub-resource); `Microsoft.Network/privateLinkServices` (ARM CRUD, sync) — `ipConfigurations`, `loadBalancerFrontendIpConfigurations`, `visibility`, `autoApproval`, `alias` (deterministic); `privateEndpointConnections` list/get/delete stubs; no real network plumbing |
 | 34 | Azure App Configuration | `Microsoft.AppConfiguration/configurationStores` (ARM CRUD, sync) + `listKeys` (deterministic connection strings) + `keyValues` sub-resource (`PUT`/`GET`/`LIST`/`DELETE`) + path-style data plane (`/{store}.appconfig/kv/{key}`) |
+| 35 | Cognitive Services / OpenAI | `Microsoft.CognitiveServices/accounts` (ARM CRUD, sync) + `listKeys` + deterministic endpoint (`.openai.azure.com` / `.cognitiveservices.azure.com`) + `accounts/deployments` sub-resource (`PUT`/`GET`/`LIST`/`DELETE`) |
 
 ### Feature matrix (detail)
 

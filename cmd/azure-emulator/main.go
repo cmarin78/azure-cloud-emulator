@@ -19,6 +19,7 @@ import (
 	"github.com/cesarmarin/azure-emulator/internal/services/armmeta"
 	"github.com/cesarmarin/azure-emulator/internal/services/authorization"
 	"github.com/cesarmarin/azure-emulator/internal/services/blob"
+	"github.com/cesarmarin/azure-emulator/internal/services/cognitiveservices"
 	"github.com/cesarmarin/azure-emulator/internal/services/compute"
 	"github.com/cesarmarin/azure-emulator/internal/services/containerinstances"
 	"github.com/cesarmarin/azure-emulator/internal/services/containerregistry"
@@ -127,6 +128,7 @@ func main() {
 	signalr.New(db).Register(srv.Mux())
 	appConfigSvc := appconfiguration.New(db)
 	appConfigSvc.Register(srv.Mux())
+	cognitiveservices.New(db).Register(srv.Mux())
 	// logicapps dispara de verdad cualquier workflow Enabled con un trigger
 	// Recurrence válido (Fase 21) -- igual que Cloud Scheduler en
 	// gcp-emulator, su New() relanza los goroutines de disparo de cualquier

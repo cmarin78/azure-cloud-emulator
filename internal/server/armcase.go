@@ -62,6 +62,7 @@ func buildArmCanonicalSegments() map[string]string {
 		"Microsoft.NotificationHubs",
 		"Microsoft.SignalRService",
 		"Microsoft.AppConfiguration",
+		"Microsoft.CognitiveServices",
 
 		// Tipos/sub-tipos de recurso (y acciones) usados en los patrones de
 		// ruta de cada servicio.
@@ -70,6 +71,7 @@ func buildArmCanonicalSegments() map[string]string {
 		"shares",
 		"configurationStores",
 		"keyValues",
+		"accounts",
 		"virtualNetworks",
 		"subnets",
 		"networkInterfaces",

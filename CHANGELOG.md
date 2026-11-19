@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.35.0] — Phase 35: Azure Cognitive Services / Azure OpenAI
+
+### Added
+- **`Microsoft.CognitiveServices/accounts`** — ARM CRUD (sync) for Cognitive Services and Azure OpenAI accounts, with deterministic endpoints (`https://{name}.openai.azure.com` for Kind `OpenAI` and `https://{name}.cognitiveservices.azure.com` for other kinds).
+- **`listKeys` action** — Deterministic primary/secondary API keys (`key1`, `key2`) derived via SHA-256 for authentication.
+- **`deployments` sub-resource (`accounts/deployments`)** — Full ARM CRUD (`PUT`/`GET`/`LIST`/`DELETE`) under cognitive accounts for model deployments (e.g., `gpt-4o`, `text-embedding-ada-002`) with SKU and properties preservation.
+- **Web Console view** — Cognitive / OpenAI view in `web/console/` for listing, creating, and deleting accounts.
+- **Provider Registration & ARM Case Normalization** — Registered `Microsoft.CognitiveServices` (`accounts` and `accounts/deployments`) in `resourcemanager` and canonical segments in `armcase.go`.
+
+---
+
 ## [0.34.0] — Phase 34: Azure App Configuration
 
 ### Added
